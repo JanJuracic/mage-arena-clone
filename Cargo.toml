@@ -7,6 +7,8 @@ edition = "2021"
 bevy = "0.15"
 avian3d = { version = "0.2", features = ["collider-from-mesh"] }
 bevy_hanabi = "0.15"
+bevy_heightmap = "0.3"
+noise = "0.9"
 rand = "0.8"
 
 [features]

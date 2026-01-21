@@ -13,6 +13,7 @@ use crate::combat::{Health, Team, Hittable, SlowEffect};
 use crate::spells::{SpellCastEvent, SpellType, SpellCooldowns};
 use crate::arena::{ArenaConfig, Obstacle, ObstacleBounds};
 use crate::particles::SpawnParticleEvent;
+use crate::physics::TerrainSampler;
 
 pub use definitions::{EnemyDefinitions, EnemyTypeId};
 
@@ -260,6 +261,7 @@ fn wave_spawner(
     enemy_defs: Res<EnemyDefinitions>,
     obstacles: Query<(&Transform, &ObstacleBounds), With<Obstacle>>,
     mut particle_events: EventWriter<SpawnParticleEvent>,
+    terrain_sampler: Res<TerrainSampler>,
 ) {
     let Some(enemy_assets) = enemy_assets else {
         return; // Assets not loaded yet
@@ -302,6 +304,7 @@ fn wave_spawner(
                 &mut commands,
                 &enemy_assets,
                 &enemy_defs,
+                &terrain_sampler,
                 spawn_pos,
                 enemy_type,
                 type_id,
@@ -368,6 +371,7 @@ fn spawn_enemy(
     commands: &mut Commands,
     enemy_assets: &EnemyAssets,
     enemy_defs: &EnemyDefinitions,
+    terrain_sampler: &TerrainSampler,
     position: Vec3,
     enemy_type: EnemyType,
     type_id: EnemyTypeId,
@@ -378,11 +382,11 @@ fn spawn_enemy(
         return;
     };
 
-    // Capsule dimensions: radius=0.5, half_length=1.0
-    // Total height = 2*radius + 2*half_length = 3.0
-    // Center to bottom = radius + half_length = 1.5
-    // Spawn higher so capsule and model are above ground
-    let spawn_position = position + Vec3::new(0.0, 2.5, 0.0);
+    // Capsule dimensions: radius=0.5, half_length=0.5
+    // Total height = 2*radius + 2*half_length = 2.0
+    // Center to bottom = radius + half_length = 1.0
+    // Use terrain sampler to get correct spawn height above terrain
+    let spawn_position = terrain_sampler.get_spawn_position(position.x, position.z, 2.0);
 
     // Spawn the enemy entity with physics (root entity)
     commands.spawn((

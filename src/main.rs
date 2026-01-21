@@ -10,6 +10,7 @@ mod combat;
 mod enemies;
 mod ui;
 mod particles;
+mod physics;
 
 use states::StatesPlugin;
 use player::PlayerPlugin;
@@ -20,6 +21,7 @@ use combat::CombatPlugin;
 use enemies::EnemyPlugin;
 use ui::UiPlugin;
 use particles::ParticlePlugin;
+use physics::PhysicsUtilPlugin;
 
 fn main() {
     App::new()
@@ -44,6 +46,7 @@ fn main() {
             EnemyPlugin,
             UiPlugin,
             ParticlePlugin,
+            PhysicsUtilPlugin,
         ))
         .run();
 }

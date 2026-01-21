@@ -5,6 +5,7 @@ use crate::states::GameState;
 use crate::combat::{Health, Mana, Team, Hittable, SlowEffect};
 use crate::spells::SpellCooldowns;
 use crate::camera::{GameCamera, CameraYaw};
+use crate::physics::{GroundSensorBundle, GroundState};
 
 pub struct PlayerPlugin;
 
@@ -14,7 +15,6 @@ impl Plugin for PlayerPlugin {
             .add_systems(
                 Update,
                 (
-                    ground_detection,
                     player_movement,
                     player_jump,
                     update_aim_from_camera,
@@ -39,9 +39,6 @@ pub struct AimDirection(pub Vec3);
 #[derive(Component)]
 pub struct JumpForce(pub f32);
 
-#[derive(Component)]
-pub struct Grounded(pub bool);
-
 // Systems
 fn spawn_player(
     mut commands: Commands,
@@ -59,8 +56,8 @@ fn spawn_player(
                 alpha_mode: AlphaMode::Blend,
                 ..default()
             })),
-            // Spawn above ground - capsule half-height is 0.4 + 0.8/2 = 0.8
-            Transform::from_xyz(0.0, 1.5, 0.0),
+            // Spawn above terrain - higher to account for elevation
+            Transform::from_xyz(0.0, 3.0, 0.0),
         ),
         // Physics components
         (
@@ -84,8 +81,9 @@ fn spawn_player(
             AimDirection(Vec3::NEG_Z),
             SpellCooldowns::new(),
             JumpForce(10.0),
-            Grounded(false),
         ),
+        // Ground sensing
+        GroundSensorBundle::player(),
         // Team and other
         (
             Team::PLAYER,
@@ -161,40 +159,15 @@ fn regenerate_mana(time: Res<Time>, mut query: Query<&mut Mana, With<Player>>) {
     }
 }
 
-fn ground_detection(
-    spatial_query: SpatialQuery,
-    mut player_query: Query<(Entity, &Transform, &mut Grounded), With<Player>>,
-) {
-    for (entity, transform, mut grounded) in player_query.iter_mut() {
-        // Cast a short ray downward from the player's feet
-        let ray_origin = transform.translation;
-        let ray_direction = Dir3::NEG_Y;
-        let max_distance = 1.0; // Slightly more than capsule half-height (0.8)
-
-        if let Some(hit) = spatial_query.cast_ray(
-            ray_origin,
-            ray_direction,
-            max_distance,
-            true,
-            &SpatialQueryFilter::default().with_excluded_entities([entity]),
-        ) {
-            // Grounded if we hit something close enough
-            grounded.0 = hit.distance < 0.9;
-        } else {
-            grounded.0 = false;
-        }
-    }
-}
-
 fn player_jump(
     keyboard: Res<ButtonInput<KeyCode>>,
-    mut player_query: Query<(&mut LinearVelocity, &JumpForce, &Grounded), With<Player>>,
+    mut player_query: Query<(&mut LinearVelocity, &JumpForce, &GroundState), With<Player>>,
 ) {
-    let Ok((mut velocity, jump_force, grounded)) = player_query.get_single_mut() else {
+    let Ok((mut velocity, jump_force, ground_state)) = player_query.get_single_mut() else {
         return;
     };
 
-    if keyboard.just_pressed(KeyCode::Space) && grounded.0 {
+    if keyboard.just_pressed(KeyCode::Space) && ground_state.grounded {
         velocity.y = jump_force.0;
     }
 }

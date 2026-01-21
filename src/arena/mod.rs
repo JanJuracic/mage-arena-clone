@@ -1,3 +1,5 @@
+mod terrain;
+
 use bevy::prelude::*;
 use bevy::pbr::{CascadeShadowConfigBuilder, NotShadowCaster, NotShadowReceiver};
 use bevy::render::render_resource::{AsBindGroup, ShaderRef};
@@ -5,6 +7,8 @@ use avian3d::prelude::*;
 use rand::Rng;
 
 use crate::states::GameState;
+use crate::physics::TerrainSampler;
+use terrain::{TerrainConfig, generate_terrain_mesh, generate_heights_matrix};
 
 // Gradient sky material for the sky dome
 #[derive(Asset, TypePath, AsBindGroup, Clone)]
@@ -39,6 +43,8 @@ impl Plugin for ArenaPlugin {
                 spawn_exclusion: 4.0,
                 center_exclusion: 10.0,
             })
+            // TerrainSampler with parameters matching terrain.rs (seed=42, height_scale=1.5, noise_scale=0.08)
+            .insert_resource(TerrainSampler::new(42, 1.5, 0.08))
             .init_resource::<TerrainAssets>()
             .add_systems(Startup, load_terrain_assets)
             .add_systems(OnEnter(GameState::Playing), (spawn_arena, spawn_lighting));
@@ -109,35 +115,51 @@ fn spawn_arena(
     arena_config: Res<ArenaConfig>,
     obstacle_config: Res<ObstacleConfig>,
     terrain_assets: Res<TerrainAssets>,
+    terrain_sampler: Res<TerrainSampler>,
 ) {
     let arena_radius = arena_config.radius;
-
-    // Ground plane - use a flat cuboid for reliable collision
-    // Visual mesh (circle rotated flat)
     let mut rng = rand::thread_rng();
+
+    // Terrain ground with varying elevation
+    let terrain_config = TerrainConfig {
+        radius: arena_radius,
+        subdivisions: 64,
+        height_scale: 1.5,
+        noise_scale: 0.08,
+    };
+
+    let terrain_mesh = generate_terrain_mesh(&terrain_config);
+    let heights = generate_heights_matrix(&terrain_config);
+
+    // Random ground color
     let ground_green = rng.gen_range(0.25..0.35);
     let ground_teal_shift = rng.gen_range(0.0..0.1);
+
+    // Visual terrain mesh
+    // bevy_heightmap generates mesh on XY plane with Z as height, but Bevy uses XZ plane with Y as height
+    // Rotation converts Z-up to Y-up; after rotation, scale (X, Y, Z) maps to (width, width, height)
     commands.spawn((
-        Mesh3d(meshes.add(Circle::new(arena_radius))),
+        Mesh3d(meshes.add(terrain_mesh)),
         MeshMaterial3d(materials.add(StandardMaterial {
             base_color: Color::srgb(0.15 + ground_teal_shift, ground_green, 0.2 + ground_teal_shift),
             perceptual_roughness: 0.9,
             ..default()
         })),
         Transform::from_xyz(0.0, 0.0, 0.0)
-            .with_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
+            .with_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2))
+            .with_scale(Vec3::new(arena_radius * 2.0, arena_radius * 2.0, 1.0)),
         Arena,
         StateScoped(GameState::Playing),
-        Name::new("Arena Floor Visual"),
+        Name::new("Terrain"),
     ));
 
-    // Ground collider - flat cuboid slightly below y=0
+    // Physics collider (heightfield)
     commands.spawn((
-        Transform::from_xyz(0.0, -0.5, 0.0),
+        Collider::heightfield(heights, Vec3::new(arena_radius * 2.0, 1.0, arena_radius * 2.0)),
         RigidBody::Static,
-        Collider::cuboid(arena_radius * 2.0, 1.0, arena_radius * 2.0),
+        Transform::from_xyz(0.0, 0.0, 0.0),
         StateScoped(GameState::Playing),
-        Name::new("Arena Floor Collider"),
+        Name::new("Terrain Collider"),
     ));
 
     // Arena boundary walls (invisible but collidable)
@@ -170,6 +192,7 @@ fn spawn_arena(
         &arena_config,
         &obstacle_config,
         &terrain_assets,
+        &terrain_sampler,
     );
 
     // Spawn decorative grass
@@ -178,6 +201,7 @@ fn spawn_arena(
         &arena_config,
         &obstacle_config,
         &terrain_assets,
+        &terrain_sampler,
     );
 }
 
@@ -228,6 +252,7 @@ fn spawn_obstacles_procedural(
     arena_config: &ArenaConfig,
     obstacle_config: &ObstacleConfig,
     terrain_assets: &TerrainAssets,
+    terrain_sampler: &TerrainSampler,
 ) {
     let mut rng = rand::thread_rng();
     let mut placed_positions: Vec<(Vec3, f32)> = vec![];
@@ -272,7 +297,9 @@ fn spawn_obstacles_procedural(
                 obstacle_config.center_exclusion + spawn_radius
                     ..arena_config.radius - 4.0 - spawn_radius,
             );
-            let pos = Vec3::new(angle.cos() * distance, 0.0, angle.sin() * distance);
+            let x = angle.cos() * distance;
+            let z = angle.sin() * distance;
+            let pos = terrain_sampler.get_spawn_position(x, z, 0.0);
 
             if is_valid_position(
                 pos,
@@ -310,6 +337,7 @@ fn spawn_decorative_grass(
     arena_config: &ArenaConfig,
     obstacle_config: &ObstacleConfig,
     terrain_assets: &TerrainAssets,
+    terrain_sampler: &TerrainSampler,
 ) {
     let mut rng = rand::thread_rng();
     let grass_count = 500;
@@ -326,7 +354,9 @@ fn spawn_decorative_grass(
         let distance = rng.gen_range(
             obstacle_config.center_exclusion..arena_config.radius - 3.0,
         );
-        let pos = Vec3::new(angle.cos() * distance, 0.0, angle.sin() * distance);
+        let x = angle.cos() * distance;
+        let z = angle.sin() * distance;
+        let pos = terrain_sampler.get_spawn_position(x, z, 0.0);
 
         // Random rotation for variety
         let rotation = Quat::from_rotation_y(rng.gen_range(0.0..std::f32::consts::TAU));
@@ -351,7 +381,7 @@ fn spawn_lighting(
     // About 45 degrees down from horizontal, angled from front-right
     commands.spawn((
         DirectionalLight {
-            illuminance: 10000.0,
+            illuminance: 2500.0,
             shadows_enabled: true,
             ..default()
         },
@@ -376,7 +406,7 @@ fn spawn_lighting(
     // Ambient light - higher for softer overall illumination
     commands.insert_resource(AmbientLight {
         color: Color::srgb(0.5, 0.5, 0.6),
-        brightness: 700.0,
+        brightness: 1500.0,
     });
 
     // Gradient sky dome

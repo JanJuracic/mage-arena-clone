@@ -1,4 +1,5 @@
 use bevy::core_pipeline::bloom::Bloom;
+use bevy::core_pipeline::post_process::ChromaticAberration;
 use bevy::core_pipeline::tonemapping::Tonemapping;
 use bevy::input::mouse::AccumulatedMouseMotion;
 use bevy::prelude::*;
@@ -77,10 +78,14 @@ fn spawn_camera(mut commands: Commands) {
             ..default()
         }),
         Transform::from_xyz(0.0, 1.8, 0.0), // Eye height
-        Tonemapping::AcesFitted, // Better color preservation
+        Tonemapping::AcesFitted, // Cinematic, saturated
         Bloom {
-            intensity: 0.5,
-            ..Bloom::OLD_SCHOOL // Additive, more dramatic
+            intensity: 0.25,
+            ..Bloom::OLD_SCHOOL // Additive, punchy
+        },
+        ChromaticAberration {
+            intensity: 0.02, // Slight RGB fringing
+            ..default()
         },
         GameCamera,
         CameraSensitivity::default(),

@@ -480,6 +480,17 @@ fn spawn_projectile(
             ParticleEffect::new(trail_effect),
             Transform::default(),
         ));
+        // Subtle point light for illumination
+        parent.spawn((
+            PointLight {
+                color: emissive_color,
+                intensity: 1200.0,
+                range: 4.0,
+                shadows_enabled: false,
+                ..default()
+            },
+            Transform::default(),
+        ));
     });
 }
 
@@ -529,6 +540,17 @@ fn spawn_magic_missile(
         // Spawn trail particle effect as child
         parent.spawn((
             ParticleEffect::new(trail_effect),
+            Transform::default(),
+        ));
+        // Subtle point light for illumination
+        parent.spawn((
+            PointLight {
+                color: Color::srgb(0.9, 0.4, 1.0), // Purple
+                intensity: 900.0,
+                range: 3.5,
+                shadows_enabled: false,
+                ..default()
+            },
             Transform::default(),
         ));
     });
