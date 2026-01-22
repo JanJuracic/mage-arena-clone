@@ -1,0 +1,144 @@
+// Arena Level Generation Configuration
+// Features: Size presets, terrain presets, density-based spawning, irregular shapes
+(
+    // Size presets define arena dimensions and shape distortion
+    // distortion_strength: 0.0 = perfect circle, up to 0.3 = very irregular
+    // distortion_scale: noise frequency (higher = more bumps around edge)
+    size_presets: [
+        (name: "Small", base_radius: 30.0, distortion_strength: 0.1, distortion_scale: 3.0),
+        (name: "Medium", base_radius: 40.0, distortion_strength: 0.15, distortion_scale: 4.0),
+        (name: "Large", base_radius: 55.0, distortion_strength: 0.2, distortion_scale: 5.0),
+    ],
+
+    // Terrain presets define height variation characteristics
+    // octaves: noise detail levels (2=smooth, 4=detailed)
+    // edge_falloff: how quickly terrain flattens at edges (0.0-1.0)
+    terrain_presets: [
+        (name: "Flat", height_scale: 0.5, noise_scale: 0.06, octaves: 2, edge_falloff: 0.3),
+        (name: "Rolling", height_scale: 1.5, noise_scale: 0.08, octaves: 3, edge_falloff: 0.5),
+        (name: "Hilly", height_scale: 2.5, noise_scale: 0.10, octaves: 4, edge_falloff: 0.7),
+    ],
+
+    // Atmosphere presets define time-of-day lighting and colors
+    // sun_yaw: 0 = North, PI/2 (1.5708) = East, PI = South, -PI/2 (-1.5708) = West
+    // sun_pitch: negative = down from horizon (-0.3 = low ~17°, -1.2 = high ~70°)
+    atmosphere_presets: [
+        (
+            name: "Dawn",
+            ground_hue_shift: 0.03,
+            ground_saturation: 0.7,
+            ground_brightness: 0.28,
+            sky_top_color: (0.4, 0.5, 0.7),
+            sky_bottom_color: (0.95, 0.6, 0.4),
+            sun_yaw: 1.5708,
+            sun_pitch: -0.35,
+            sun_color: (1.0, 0.85, 0.6),
+            sun_illuminance: 1800.0,
+            ambient_color: (0.6, 0.5, 0.5),
+            ambient_brightness: 1200.0,
+        ),
+        (
+            name: "Noon",
+            ground_hue_shift: 0.0,
+            ground_saturation: 0.85,
+            ground_brightness: 0.32,
+            sky_top_color: (0.2, 0.4, 0.85),
+            sky_bottom_color: (0.7, 0.8, 0.95),
+            sun_yaw: 0.0,
+            sun_pitch: -1.2,
+            sun_color: (1.0, 1.0, 0.98),
+            sun_illuminance: 3000.0,
+            ambient_color: (0.5, 0.55, 0.65),
+            ambient_brightness: 1800.0,
+        ),
+        (
+            name: "Dusk",
+            ground_hue_shift: 0.05,
+            ground_saturation: 0.65,
+            ground_brightness: 0.25,
+            sky_top_color: (0.3, 0.35, 0.6),
+            sky_bottom_color: (0.95, 0.45, 0.25),
+            sun_yaw: -1.5708,
+            sun_pitch: -0.3,
+            sun_color: (1.0, 0.6, 0.35),
+            sun_illuminance: 1500.0,
+            ambient_color: (0.55, 0.45, 0.45),
+            ambient_brightness: 1000.0,
+        ),
+        (
+            name: "Night",
+            ground_hue_shift: -0.05,
+            ground_saturation: 0.4,
+            ground_brightness: 0.18,
+            sky_top_color: (0.05, 0.08, 0.15),
+            sky_bottom_color: (0.15, 0.12, 0.2),
+            sun_yaw: 0.785,
+            sun_pitch: -0.6,
+            sun_color: (0.7, 0.75, 0.9),
+            sun_illuminance: 400.0,
+            ambient_color: (0.3, 0.35, 0.5),
+            ambient_brightness: 400.0,
+        ),
+    ],
+
+    // Active selections - use preset name or "Random" for variety
+    active_size: "Random",
+    active_terrain: "Random",
+    active_atmosphere: "Random",
+
+    // Density-based spawning - items scale with arena area
+    // Values are per 100 square meters
+    density: (
+        obstacles_per_100_sqm: 0.4,   // ~20 for 5000 sqm arena
+        grass_per_100_sqm: 10.0,      // ~500 for 5000 sqm arena
+        mushrooms_per_100_sqm: 1.0,   // ~50 for 5000 sqm arena
+    ),
+
+    // Obstacle spawning configuration
+    obstacles: (
+        // Minimum distance between obstacles
+        min_spacing: (min: 4.0, max: 10.0, default: 6.0),
+        // Exclusion radius around enemy spawn ring
+        spawn_exclusion: 4.0,
+        // Exclusion radius around center (player spawn)
+        center_exclusion: 10.0,
+        // Weight for tree selection vs rocks
+        tree_weight: 0.75,
+        rock_weight: 0.25,
+    ),
+
+    // Boulder boundary configuration
+    boundary: (
+        // Gap between boulders in the boundary wall
+        boulder_spacing: (min: 0.0, max: 2.0, default: 0.5),
+        // Random size variation for boulders (0.0-0.5)
+        boulder_size_variation: 0.15,
+        // How far inward from arena edge to place boulders
+        inward_offset: (min: 1.0, max: 3.0, default: 2.0),
+        // Maximum rotation variation in radians
+        rotation_variation: 3.14159,
+    ),
+
+    // Decoration configuration (scale only - counts from density)
+    decoration: (
+        // Scale multiplier for grass
+        grass_scale: (min: 0.5, max: 1.0, default: 0.7),
+    ),
+
+    // Theme configuration
+    themes: (
+        // Active theme: Summer, Autumn, or Random
+        active_theme: Summer,
+        // Chance for dead trees in Summer (0.0-1.0)
+        dead_tree_chance_summer: 0.05,
+        // Chance for dead trees in Autumn (0.0-1.0)
+        dead_tree_chance_autumn: 0.20,
+    ),
+
+    // Mesh subdivisions for terrain detail
+    subdivisions: 64,
+
+    // Random seed for reproducible generation (None = random each time)
+    // Set to a specific number like Some(12345) to get the same arena each run
+    seed: None,
+)

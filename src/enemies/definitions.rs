@@ -2,6 +2,7 @@ use bevy::prelude::*;
 use std::collections::HashMap;
 
 use crate::spells::SpellType;
+use super::config::{EnemyConfig, EnemyTypeData};
 
 /// Unique identifier for enemy types
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -78,5 +79,51 @@ impl Default for EnemyDefinitions {
 impl EnemyDefinitions {
     pub fn get(&self, id: EnemyTypeId) -> Option<&EnemyDefinition> {
         self.definitions.get(&id)
+    }
+
+    /// Create EnemyDefinitions from loaded config
+    pub fn from_config(config: &EnemyConfig) -> Self {
+        let mut definitions = HashMap::new();
+
+        // Map config keys to EnemyTypeIds
+        if let Some(fire_imp) = config.get_enemy_type("fire_imp") {
+            definitions.insert(EnemyTypeId::FIRE_IMP, EnemyDefinition::from(fire_imp));
+        }
+
+        if let Some(frost_mage) = config.get_enemy_type("frost_mage") {
+            definitions.insert(EnemyTypeId::FROST_MAGE, EnemyDefinition::from(frost_mage));
+        }
+
+        // Fall back to defaults for any missing definitions
+        let defaults = Self::default();
+        if !definitions.contains_key(&EnemyTypeId::FIRE_IMP) {
+            if let Some(def) = defaults.get(EnemyTypeId::FIRE_IMP) {
+                definitions.insert(EnemyTypeId::FIRE_IMP, def.clone());
+            }
+        }
+        if !definitions.contains_key(&EnemyTypeId::FROST_MAGE) {
+            if let Some(def) = defaults.get(EnemyTypeId::FROST_MAGE) {
+                definitions.insert(EnemyTypeId::FROST_MAGE, def.clone());
+            }
+        }
+
+        Self { definitions }
+    }
+}
+
+impl From<&EnemyTypeData> for EnemyDefinition {
+    fn from(data: &EnemyTypeData) -> Self {
+        Self {
+            name: data.name.clone(),
+            max_health: data.max_health,
+            movement_speed: data.movement_speed,
+            detection_range: data.detection_range,
+            attack_range: data.attack_range,
+            attack_cooldown: data.attack_cooldown,
+            primary_attack: data.primary_attack,
+            cast_duration: data.cast_duration,
+            model_scale: data.model_scale,
+            model_y_offset: data.model_y_offset,
+        }
     }
 }

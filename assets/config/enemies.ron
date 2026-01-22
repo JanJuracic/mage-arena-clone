@@ -1,0 +1,39 @@
+(
+    // Steering behavior config (uniform for all enemies)
+    steering: (
+        detection_radius: 8.0,
+        avoidance_margin: 2.5,
+        avoidance_weight: 2.5,
+        steering_smoothing: 0.08,
+        separation_radius: 4.0,
+        separation_weight: 0.8,
+    ),
+
+    // Enemy type definitions
+    enemy_types: {
+        "fire_imp": (
+            name: "Fire Imp",
+            max_health: 15.0,
+            movement_speed: 5.46,
+            detection_range: 60.0,
+            attack_range: 8.0,
+            attack_cooldown: 1.5,
+            primary_attack: EnemyFireball,
+            cast_duration: 0.8,
+            model_scale: 0.7,
+            model_y_offset: -1.0,
+        ),
+        "frost_mage": (
+            name: "Frost Mage",
+            max_health: 25.0,
+            movement_speed: 3.64,
+            detection_range: 66.0,
+            attack_range: 10.0,
+            attack_cooldown: 2.5,
+            primary_attack: EnemyFrostbolt,
+            cast_duration: 1.0,
+            model_scale: 0.7,
+            model_y_offset: -1.0,
+        ),
+    },
+)

@@ -1,3 +1,4 @@
+pub mod config;
 pub mod definitions;
 
 use std::time::Duration;
@@ -7,21 +8,27 @@ use bevy::animation::prelude::AnimationTransitions;
 use avian3d::prelude::*;
 use rand::Rng;
 
-use crate::states::GameState;
+use crate::states::{GameState, RunState};
 use crate::player::Player;
 use crate::combat::{Health, Team, Hittable, SlowEffect};
 use crate::spells::{SpellCastEvent, SpellType, SpellCooldowns};
 use crate::arena::{ArenaConfig, Obstacle, ObstacleBounds};
 use crate::particles::SpawnParticleEvent;
 use crate::physics::TerrainSampler;
+use crate::effects::spawn_enemy_spawn_light;
 
+pub use config::EnemyConfig;
 pub use definitions::{EnemyDefinitions, EnemyTypeId};
 
 pub struct EnemyPlugin;
 
 impl Plugin for EnemyPlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(EnemyDefinitions::default())
+        // Load external config (falls back to defaults if file missing)
+        let enemy_config = EnemyConfig::load();
+
+        app.insert_resource(EnemyDefinitions::from_config(&enemy_config))
+        .insert_resource(enemy_config)
         .insert_resource(WaveState {
             wave_number: 1,
             enemies_remaining: 0,
@@ -115,7 +122,7 @@ pub struct CastingSpellAnimation {
     pub has_fired: bool,
 }
 
-/// Steering behavior configuration for obstacle avoidance
+/// Steering behavior configuration for obstacle avoidance and enemy separation
 #[derive(Component)]
 pub struct SteeringConfig {
     /// How far ahead to detect obstacles
@@ -126,6 +133,10 @@ pub struct SteeringConfig {
     pub avoidance_weight: f32,
     /// Smoothing factor for steering changes (0-1, lower = smoother)
     pub steering_smoothing: f32,
+    /// Distance to detect nearby enemies for separation
+    pub separation_radius: f32,
+    /// Strength of separation force (closer to 0 = subtle, closer to 2 = strong)
+    pub separation_weight: f32,
 }
 
 impl Default for SteeringConfig {
@@ -135,6 +146,22 @@ impl Default for SteeringConfig {
             avoidance_margin: 2.5,
             avoidance_weight: 2.5,
             steering_smoothing: 0.08,
+            separation_radius: 3.5,
+            separation_weight: 0.8,
+        }
+    }
+}
+
+impl SteeringConfig {
+    /// Create SteeringConfig from loaded config data
+    pub fn from_config(data: &config::SteeringConfigData) -> Self {
+        Self {
+            detection_radius: data.detection_radius,
+            avoidance_margin: data.avoidance_margin,
+            avoidance_weight: data.avoidance_weight,
+            steering_smoothing: data.steering_smoothing,
+            separation_radius: data.separation_radius,
+            separation_weight: data.separation_weight,
         }
     }
 }
@@ -255,10 +282,13 @@ fn wave_spawner(
     mut commands: Commands,
     time: Res<Time>,
     mut wave_state: ResMut<WaveState>,
+    mut next_state: ResMut<NextState<GameState>>,
+    run_state: Res<RunState>,
     enemies: Query<Entity, With<Enemy>>,
     arena_config: Res<ArenaConfig>,
     enemy_assets: Option<Res<EnemyAssets>>,
     enemy_defs: Res<EnemyDefinitions>,
+    enemy_config: Res<EnemyConfig>,
     obstacles: Query<(&Transform, &ObstacleBounds), With<Obstacle>>,
     mut particle_events: EventWriter<SpawnParticleEvent>,
     terrain_sampler: Res<TerrainSampler>,
@@ -275,11 +305,18 @@ fn wave_spawner(
 
     // Spawn new wave if all enemies dead and timer finished
     if enemy_count == 0 && wave_state.spawn_timer.finished() {
+        // Check if level is complete (2 waves finished)
+        if wave_state.wave_number > 2 {
+            // Level complete - go to shop
+            next_state.set(GameState::Shop);
+            return;
+        }
+
         let num_enemies = ((wave_state.wave_number + 2) * 3).min(30);
 
         let mut rng = rand::thread_rng();
-        let spawn_radius_min = arena_config.radius * 0.5;
-        let spawn_radius_max = arena_config.radius * 0.85;
+        let spawn_radius_min = arena_config.radius() * 0.5;
+        let spawn_radius_max = arena_config.radius() * 0.85;
         let min_distance_from_obstacle = 4.5; // Must exceed largest obstacle radius (3.0) + enemy radius
 
         for i in 0..num_enemies {
@@ -304,14 +341,17 @@ fn wave_spawner(
                 &mut commands,
                 &enemy_assets,
                 &enemy_defs,
+                &enemy_config,
                 &terrain_sampler,
                 spawn_pos,
                 enemy_type,
                 type_id,
+                run_state.current_level,
             );
 
             // Spawn purple particle effect at enemy spawn location
             particle_events.send(SpawnParticleEvent::enemy_spawn(spawn_pos));
+            spawn_enemy_spawn_light(&mut commands, spawn_pos);
         }
 
         wave_state.wave_number += 1;
@@ -371,16 +411,22 @@ fn spawn_enemy(
     commands: &mut Commands,
     enemy_assets: &EnemyAssets,
     enemy_defs: &EnemyDefinitions,
+    enemy_config: &EnemyConfig,
     terrain_sampler: &TerrainSampler,
     position: Vec3,
     enemy_type: EnemyType,
     type_id: EnemyTypeId,
+    level: u32,
 ) {
     // Get the enemy definition
     let Some(def) = enemy_defs.get(type_id) else {
         warn!("No definition found for enemy type {:?}", type_id);
         return;
     };
+
+    // Apply level-based scaling: +10% health per level beyond 1
+    let level_scale = 1.0 + (level.saturating_sub(1)) as f32 * 0.1;
+    let scaled_health = def.max_health * level_scale;
 
     // Capsule dimensions: radius=0.5, half_length=0.5
     // Total height = 2*radius + 2*half_length = 2.0
@@ -407,7 +453,7 @@ fn spawn_enemy(
         (
             Enemy,
             enemy_type,
-            Health::new(def.max_health),
+            Health::new(scaled_health),
             MovementSpeed(def.movement_speed),
             AIState::default(),
         ),
@@ -418,9 +464,9 @@ fn spawn_enemy(
             AttackCooldown(Timer::from_seconds(def.attack_cooldown, TimerMode::Once)),
             SpellCooldowns::new(),
         ),
-        // Steering behavior for obstacle avoidance
+        // Steering behavior for obstacle avoidance and enemy separation (from config)
         (
-            SteeringConfig::default(),
+            SteeringConfig::from_config(enemy_config.steering()),
             SteeringState::default(),
         ),
         // Attack components from definition
@@ -652,6 +698,42 @@ fn calculate_avoidance_force(
     total_avoidance * config.avoidance_weight
 }
 
+/// Calculate separation force from nearby enemies using Craig Reynolds' separation principle
+/// Returns a repulsion vector away from nearby enemies, weighted by inverse distance
+fn calculate_separation_force(
+    entity: Entity,
+    position: Vec3,
+    config: &SteeringConfig,
+    enemy_positions: &[(Entity, Vec3)],
+) -> Vec3 {
+    let mut separation = Vec3::ZERO;
+    let mut neighbor_count = 0;
+
+    for &(other_entity, other_pos) in enemy_positions.iter() {
+        if other_entity == entity {
+            continue;
+        }
+
+        let to_self = position - other_pos;
+        // Use XZ plane distance only for separation
+        let to_self_xz = Vec3::new(to_self.x, 0.0, to_self.z);
+        let distance = to_self_xz.length();
+
+        if distance < config.separation_radius && distance > 0.01 {
+            // Inverse distance weighting (closer = stronger repulsion)
+            let strength = 1.0 - (distance / config.separation_radius);
+            separation += to_self_xz.normalize_or_zero() * strength;
+            neighbor_count += 1;
+        }
+    }
+
+    if neighbor_count > 0 {
+        separation / neighbor_count as f32
+    } else {
+        Vec3::ZERO
+    }
+}
+
 /// Check if there's a clear line of sight from origin to target (on XZ plane)
 /// Returns true if no obstacles block the path
 fn has_line_of_sight(
@@ -745,6 +827,7 @@ fn ai_movement(
     obstacles: Query<(&Transform, &ObstacleBounds), With<Obstacle>>,
     mut enemy_query: Query<
         (
+            Entity,
             &mut Transform,
             &mut LinearVelocity,
             &MovementSpeed,
@@ -765,7 +848,13 @@ fn ai_movement(
 
     let dt = time.delta_secs();
 
-    for (mut transform, mut velocity, speed, attack_range, mut ai_state, mut animator, steering_config, mut steering_state, slow_effect, casting) in
+    // Collect enemy positions for separation calculation (avoids query conflict)
+    let enemy_positions: Vec<(Entity, Vec3)> = enemy_query
+        .iter()
+        .map(|(entity, transform, ..)| (entity, transform.translation))
+        .collect();
+
+    for (entity, mut transform, mut velocity, speed, attack_range, mut ai_state, mut animator, steering_config, mut steering_state, slow_effect, casting) in
         enemy_query.iter_mut()
     {
         let is_casting = casting.is_some();
@@ -827,9 +916,19 @@ fn ai_movement(
                         &obstacles,
                     );
 
-                    // Combine seek and avoidance using weighted sum
+                    // Calculate separation force from nearby enemies
+                    let separation_force = calculate_separation_force(
+                        entity,
+                        transform.translation,
+                        steering_config,
+                        &enemy_positions,
+                    );
+
+                    // Combine seek, avoidance, and separation using weighted sum
                     // Avoidance force is already scaled by weight in the function
-                    let combined_velocity = desired_velocity + avoidance_force * max_speed;
+                    let combined_velocity = desired_velocity
+                        + avoidance_force * max_speed
+                        + separation_force * steering_config.separation_weight * max_speed;
 
                     // Clamp to max speed
                     let target_velocity = if combined_velocity.length() > max_speed {

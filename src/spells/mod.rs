@@ -9,6 +9,7 @@ use crate::arena::ArenaConfig;
 use crate::particles::{SpawnParticleEvent, ParticleSet, TrailConfig};
 use bevy_hanabi::{EffectAsset, ParticleEffect};
 use crate::camera::ScreenShakeEvent;
+use crate::effects::{spawn_fireball_explosion_light, spawn_frost_explosion_light};
 
 pub struct SpellPlugin;
 
@@ -44,7 +45,7 @@ impl Plugin for SpellPlugin {
 }
 
 // Spell types
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, serde::Serialize, serde::Deserialize)]
 pub enum SpellType {
     Fireball,
     Frostbolt,
@@ -370,7 +371,7 @@ fn handle_spell_cast(
                 // Teleport to aim direction, clamped to arena
                 if let Ok(mut caster_transform) = transform_query.get_mut(event.caster) {
                     let target = event.position + event.direction * stats.range;
-                    let clamped = clamp_to_arena(target, arena_config.radius - 1.0);
+                    let clamped = clamp_to_arena(target, arena_config.radius() - 1.0);
                     caster_transform.translation = Vec3::new(clamped.x, caster_transform.translation.y, clamped.z);
                 }
             }
@@ -741,6 +742,7 @@ fn projectile_collision(
                             source: projectile.owner,
                         });
                         commands.entity(target_entity).insert(SlowEffect::new(0.5, 2.0));
+                        spawn_frost_explosion_light(&mut commands, hit_pos);
                     }
                     SpellType::EnemyFrostbolt => {
                         // Direct damage + slow (same as player frostbolt)
@@ -750,6 +752,7 @@ fn projectile_collision(
                             source: projectile.owner,
                         });
                         commands.entity(target_entity).insert(SlowEffect::new(0.5, 2.0));
+                        spawn_frost_explosion_light(&mut commands, hit_pos);
                     }
                     _ => {
                         // Direct damage for other spells
@@ -839,7 +842,7 @@ fn projectile_terrain_collision(
                 }
             }
 
-            // Spawn fireball explosion for AoE damage
+            // Spawn fireball explosion for AoE damage, or frost light for frostbolt
             match projectile.spell_type {
                 SpellType::Fireball => {
                     spawn_fireball_explosion(
@@ -863,6 +866,9 @@ fn projectile_terrain_collision(
                         projectile.damage,
                         projectile.owner_team,
                     );
+                }
+                SpellType::Frostbolt | SpellType::EnemyFrostbolt => {
+                    spawn_frost_explosion_light(&mut commands, hit_position);
                 }
                 _ => {}
             }
@@ -903,6 +909,9 @@ fn spawn_fireball_explosion(
     damage: f32,
     owner_team: Team,
 ) {
+    // Spawn temporary light for the explosion
+    spawn_fireball_explosion_light(commands, position);
+
     commands.spawn((
         Mesh3d(meshes.add(Sphere::new(1.0))), // Unit sphere, scaled by transform
         MeshMaterial3d(materials.add(StandardMaterial {
