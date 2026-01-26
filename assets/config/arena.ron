@@ -22,20 +22,44 @@
     // Atmosphere presets define time-of-day lighting and colors
     // sun_yaw: 0 = North, PI/2 (1.5708) = East, PI = South, -PI/2 (-1.5708) = West
     // sun_pitch: negative = down from horizon (-0.3 = low ~17°, -1.2 = high ~70°)
+    // fog_color: RGB for atmosphere-tinted distance fog
+    // fog_start/fog_end: distance range for linear fog falloff
     atmosphere_presets: [
         (
             name: "Dawn",
             ground_hue_shift: 0.03,
             ground_saturation: 0.7,
-            ground_brightness: 0.28,
+            ground_brightness: 0.32,
             sky_top_color: (0.4, 0.5, 0.7),
             sky_bottom_color: (0.95, 0.6, 0.4),
             sun_yaw: 1.5708,
             sun_pitch: -0.35,
             sun_color: (1.0, 0.85, 0.6),
-            sun_illuminance: 1800.0,
+            sun_illuminance: 2400.0,
             ambient_color: (0.6, 0.5, 0.5),
-            ambient_brightness: 1200.0,
+            ambient_brightness: 1500.0,
+            fog_color: (1.0, 0.9, 0.8),
+            fog_start: 25.0,
+            fog_end: 90.0,
+            fog_density: 0.025,
+        ),
+        (
+            name: "Morning",
+            ground_hue_shift: 0.01,
+            ground_saturation: 0.75,
+            ground_brightness: 0.30,
+            sky_top_color: (0.25, 0.45, 0.8),
+            sky_bottom_color: (0.8, 0.75, 0.65),
+            sun_yaw: 1.5708,
+            sun_pitch: -0.8,
+            sun_color: (1.0, 0.95, 0.85),
+            sun_illuminance: 2600.0,
+            ambient_color: (0.55, 0.55, 0.6),
+            ambient_brightness: 1600.0,
+            fog_color: (0.9, 0.9, 0.95),
+            fog_start: 28.0,
+            fog_end: 95.0,
+            fog_density: 0.022,
         ),
         (
             name: "Noon",
@@ -50,34 +74,64 @@
             sun_illuminance: 3000.0,
             ambient_color: (0.5, 0.55, 0.65),
             ambient_brightness: 1800.0,
+            fog_color: (0.85, 0.9, 1.0),
+            fog_start: 30.0,
+            fog_end: 100.0,
+            fog_density: 0.02,
+        ),
+        (
+            name: "Afternoon",
+            ground_hue_shift: 0.02,
+            ground_saturation: 0.75,
+            ground_brightness: 0.28,
+            sky_top_color: (0.3, 0.45, 0.75),
+            sky_bottom_color: (0.9, 0.7, 0.5),
+            sun_yaw: -1.5708,
+            sun_pitch: -0.55,
+            sun_color: (1.0, 0.85, 0.6),
+            sun_illuminance: 2400.0,
+            ambient_color: (0.6, 0.55, 0.5),
+            ambient_brightness: 1500.0,
+            fog_color: (0.95, 0.85, 0.75),
+            fog_start: 25.0,
+            fog_end: 90.0,
+            fog_density: 0.025,
         ),
         (
             name: "Dusk",
             ground_hue_shift: 0.05,
             ground_saturation: 0.65,
-            ground_brightness: 0.25,
+            ground_brightness: 0.30,
             sky_top_color: (0.3, 0.35, 0.6),
             sky_bottom_color: (0.95, 0.45, 0.25),
             sun_yaw: -1.5708,
             sun_pitch: -0.3,
             sun_color: (1.0, 0.6, 0.35),
-            sun_illuminance: 1500.0,
+            sun_illuminance: 2200.0,
             ambient_color: (0.55, 0.45, 0.45),
-            ambient_brightness: 1000.0,
+            ambient_brightness: 1500.0,
+            fog_color: (1.0, 0.7, 0.6),
+            fog_start: 20.0,
+            fog_end: 80.0,
+            fog_density: 0.03,
         ),
         (
             name: "Night",
             ground_hue_shift: -0.05,
             ground_saturation: 0.4,
-            ground_brightness: 0.18,
+            ground_brightness: 0.24,
             sky_top_color: (0.05, 0.08, 0.15),
             sky_bottom_color: (0.15, 0.12, 0.2),
             sun_yaw: 0.785,
             sun_pitch: -0.6,
             sun_color: (0.7, 0.75, 0.9),
-            sun_illuminance: 400.0,
+            sun_illuminance: 1800.0,
             ambient_color: (0.3, 0.35, 0.5),
-            ambient_brightness: 400.0,
+            ambient_brightness: 1400.0,
+            fog_color: (0.3, 0.35, 0.5),
+            fog_start: 15.0,
+            fog_end: 70.0,
+            fog_density: 0.035,
         ),
     ],
 
@@ -90,7 +144,7 @@
     // Values are per 100 square meters
     density: (
         obstacles_per_100_sqm: 0.4,   // ~20 for 5000 sqm arena
-        grass_per_100_sqm: 10.0,      // ~500 for 5000 sqm arena
+        grass_per_100_sqm: 20.0,      // ~1000 for 5000 sqm arena
         mushrooms_per_100_sqm: 1.0,   // ~50 for 5000 sqm arena
     ),
 
@@ -102,9 +156,10 @@
         spawn_exclusion: 4.0,
         // Exclusion radius around center (player spawn)
         center_exclusion: 10.0,
-        // Weight for tree selection vs rocks
-        tree_weight: 0.75,
-        rock_weight: 0.25,
+        // Weight for obstacle type selection
+        tree_weight: 0.60,
+        rock_weight: 0.20,
+        boulder_weight: 0.20,
     ),
 
     // Boulder boundary configuration
