@@ -7,8 +7,17 @@ use std::f32::consts::TAU;
 use crate::arena::assets::{ModelMetadata, TerrainAssets};
 use crate::arena::config::{ArenaConfig, BiomeTheme, DecorationConfig, ObstacleConfig};
 use crate::arena::shape::ArenaShape;
+use crate::arena::terrain::MAX_GRASS_SLOPE_RAD;
 use crate::physics::TerrainSampler;
 use crate::states::GameState;
+
+/// Internal enum to track obstacle type for height offset selection
+#[derive(Clone, Copy)]
+enum ObstacleType {
+    Tree,
+    Rock,
+    Boulder,
+}
 
 /// Component to mark obstacles
 #[derive(Component)]
@@ -31,6 +40,7 @@ fn is_valid_position(
     spawn_exclusion: f32,
     center_exclusion: f32,
     shape: &ArenaShape,
+    terrain_sampler: &TerrainSampler,
 ) -> bool {
     let distance_from_center = (pos.x * pos.x + pos.z * pos.z).sqrt();
 
@@ -58,6 +68,12 @@ fn is_valid_position(
         if dist < required_dist {
             return false;
         }
+    }
+
+    // Check 5: Not underwater (at least 0.5 above water level)
+    let height = terrain_sampler.sample_height(pos.x, pos.z);
+    if height < terrain_sampler.water_level() + 0.5 {
+        return false;
     }
 
     true
@@ -126,7 +142,8 @@ pub fn spawn_obstacles(
         let tree_threshold = obstacle_config.tree_weight;
         let rock_threshold = tree_threshold + obstacle_config.rock_weight;
 
-        let (model_meta, scale) = if roll < tree_threshold {
+        // Determine obstacle type and get model/scale
+        let (model_meta, scale, obstacle_type) = if roll < tree_threshold {
             // Spawn a tree (scale 1.0)
             if let Some(tree) = select_tree_model(
                 terrain_assets,
@@ -134,7 +151,7 @@ pub fn spawn_obstacles(
                 decoration_config.dead_tree_chance,
                 rng,
             ) {
-                (tree.clone(), 1.0)
+                (tree.clone(), 1.0, ObstacleType::Tree)
             } else {
                 continue;
             }
@@ -144,7 +161,7 @@ pub fn spawn_obstacles(
                 continue;
             }
             let rock_index = rng.gen_range(0..terrain_assets.rocks.len());
-            (terrain_assets.rocks[rock_index].clone(), 1.0)
+            (terrain_assets.rocks[rock_index].clone(), 1.0, ObstacleType::Rock)
         } else {
             // Spawn an interior boulder (scale 0.5-1.0)
             if terrain_assets.interior_boulders.is_empty() {
@@ -152,7 +169,14 @@ pub fn spawn_obstacles(
             }
             let boulder_index = rng.gen_range(0..terrain_assets.interior_boulders.len());
             let boulder_scale = rng.gen_range(0.5..1.0);
-            (terrain_assets.interior_boulders[boulder_index].clone(), boulder_scale)
+            (terrain_assets.interior_boulders[boulder_index].clone(), boulder_scale, ObstacleType::Boulder)
+        };
+
+        // Get height offset based on obstacle type
+        let height_offset = match obstacle_type {
+            ObstacleType::Tree => obstacle_config.tree_height_offset,
+            ObstacleType::Rock => obstacle_config.rock_height_offset,
+            ObstacleType::Boulder => obstacle_config.boulder_height_offset,
         };
 
         // Random rotation
@@ -170,10 +194,12 @@ pub fn spawn_obstacles(
                 continue;
             }
 
-            let distance = rng.gen_range(min_spawn_dist..max_spawn_dist);
+            // Use sqrt for uniform distribution in Cartesian space (polar sampling bias fix)
+            let t = rng.gen::<f32>().sqrt();
+            let distance = min_spawn_dist + t * (max_spawn_dist - min_spawn_dist);
             let x = angle.cos() * distance;
             let z = angle.sin() * distance;
-            let pos = terrain_sampler.get_spawn_position(x, z, 0.0);
+            let pos = terrain_sampler.get_spawn_position(x, z, height_offset);
 
             if is_valid_position(
                 pos,
@@ -184,6 +210,7 @@ pub fn spawn_obstacles(
                 obstacle_config.spawn_exclusion,
                 obstacle_config.center_exclusion,
                 &arena_config.shape,
+                terrain_sampler,
             ) {
                 commands.spawn((
                     SceneRoot(model_meta.handle.clone()),
@@ -244,27 +271,42 @@ pub fn spawn_grass(
         for _ in 0..max_attempts {
             let angle = rng.gen_range(0.0..TAU);
             let max_dist = arena_config.shape.min_radius() - wall_margin;
-            let distance = rng.gen_range(obstacle_config.center_exclusion..max_dist.max(obstacle_config.center_exclusion + 1.0));
+            // Use sqrt for uniform distribution in Cartesian space (polar sampling bias fix)
+            let t = rng.gen::<f32>().sqrt();
+            let distance = t * max_dist.max(1.0);
             let x = angle.cos() * distance;
             let z = angle.sin() * distance;
 
             // Verify position is within the irregular shape
-            if arena_config.shape.contains_with_margin(x, z, wall_margin) {
-                let pos = terrain_sampler.get_spawn_position(x, z, 0.0);
-
-                let rotation = Quat::from_rotation_y(rng.gen_range(0.0..TAU));
-                let scale = decoration_config.grass_scale * rng.gen_range(0.8..1.2);
-
-                commands.spawn((
-                    SceneRoot(model),
-                    Transform::from_translation(pos)
-                        .with_rotation(rotation)
-                        .with_scale(Vec3::splat(scale)),
-                    StateScoped(GameState::Playing),
-                    Name::new("Decorative Grass"),
-                ));
-                break;
+            if !arena_config.shape.contains_with_margin(x, z, wall_margin) {
+                continue;
             }
+
+            // Check slope - grass only grows on gentle slopes (< 30 degrees)
+            let slope = terrain_sampler.calculate_slope(x, z);
+            if slope > MAX_GRASS_SLOPE_RAD {
+                continue;
+            }
+
+            // Check water level - no grass underwater
+            if terrain_sampler.is_underwater(x, z) {
+                continue;
+            }
+
+            let pos = terrain_sampler.get_spawn_position(x, z, decoration_config.grass_height_offset);
+
+            let rotation = Quat::from_rotation_y(rng.gen_range(0.0..TAU));
+            let scale = decoration_config.grass_scale * rng.gen_range(0.8..1.2);
+
+            commands.spawn((
+                SceneRoot(model),
+                Transform::from_translation(pos)
+                    .with_rotation(rotation)
+                    .with_scale(Vec3::splat(scale)),
+                StateScoped(GameState::Playing),
+                Name::new("Decorative Grass"),
+            ));
+            break;
         }
     }
 }
@@ -306,27 +348,42 @@ pub fn spawn_mushrooms(
         for _ in 0..max_attempts {
             let angle = rng.gen_range(0.0..TAU);
             let max_dist = arena_config.shape.min_radius() - wall_margin;
-            let distance = rng.gen_range(obstacle_config.center_exclusion..max_dist.max(obstacle_config.center_exclusion + 1.0));
+            // Use sqrt for uniform distribution in Cartesian space (polar sampling bias fix)
+            let t = rng.gen::<f32>().sqrt();
+            let distance = t * max_dist.max(1.0);
             let x = angle.cos() * distance;
             let z = angle.sin() * distance;
 
             // Verify position is within the irregular shape
-            if arena_config.shape.contains_with_margin(x, z, wall_margin) {
-                let pos = terrain_sampler.get_spawn_position(x, z, 0.0);
-
-                let rotation = Quat::from_rotation_y(rng.gen_range(0.0..TAU));
-                let scale = rng.gen_range(0.6..1.0);
-
-                commands.spawn((
-                    SceneRoot(model),
-                    Transform::from_translation(pos)
-                        .with_rotation(rotation)
-                        .with_scale(Vec3::splat(scale)),
-                    StateScoped(GameState::Playing),
-                    Name::new("Decorative Mushroom"),
-                ));
-                break;
+            if !arena_config.shape.contains_with_margin(x, z, wall_margin) {
+                continue;
             }
+
+            // Check slope - mushrooms only grow on gentle slopes (< 30 degrees)
+            let slope = terrain_sampler.calculate_slope(x, z);
+            if slope > MAX_GRASS_SLOPE_RAD {
+                continue;
+            }
+
+            // Check water level - no mushrooms underwater
+            if terrain_sampler.is_underwater(x, z) {
+                continue;
+            }
+
+            let pos = terrain_sampler.get_spawn_position(x, z, decoration_config.mushroom_height_offset);
+
+            let rotation = Quat::from_rotation_y(rng.gen_range(0.0..TAU));
+            let scale = rng.gen_range(0.6..1.0);
+
+            commands.spawn((
+                SceneRoot(model),
+                Transform::from_translation(pos)
+                    .with_rotation(rotation)
+                    .with_scale(Vec3::splat(scale)),
+                StateScoped(GameState::Playing),
+                Name::new("Decorative Mushroom"),
+            ));
+            break;
         }
     }
 }

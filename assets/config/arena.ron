@@ -1,5 +1,5 @@
 // Arena Level Generation Configuration
-// Features: Size presets, terrain presets, density-based spawning, irregular shapes
+// Features: Island-in-water terrain with shore slopes and ponds
 (
     // Size presets define arena dimensions and shape distortion
     // distortion_strength: 0.0 = perfect circle, up to 0.3 = very irregular
@@ -12,11 +12,12 @@
 
     // Terrain presets define height variation characteristics
     // octaves: noise detail levels (2=smooth, 4=detailed)
-    // edge_falloff: how quickly terrain flattens at edges (0.0-1.0)
+    // edge_falloff: how quickly terrain flattens at edges (0.0-1.0) - less important with shore slopes
+    // Increased amplitude (~60%) and reduced frequency (~30%) for bigger, broader features
     terrain_presets: [
-        (name: "Flat", height_scale: 0.5, noise_scale: 0.06, octaves: 2, edge_falloff: 0.3),
-        (name: "Rolling", height_scale: 1.5, noise_scale: 0.08, octaves: 3, edge_falloff: 0.5),
-        (name: "Hilly", height_scale: 2.5, noise_scale: 0.10, octaves: 4, edge_falloff: 0.7),
+        (name: "Flat", height_scale: 1.2, noise_scale: 0.04, octaves: 2, edge_falloff: 0.3),
+        (name: "Rolling", height_scale: 3.6, noise_scale: 0.055, octaves: 3, edge_falloff: 0.5),
+        (name: "Hilly", height_scale: 6.0, noise_scale: 0.07, octaves: 4, edge_falloff: 0.7),
     ],
 
     // Atmosphere presets define time-of-day lighting and colors
@@ -138,7 +139,7 @@
     // Active selections - use preset name or "Random" for variety
     active_size: "Random",
     active_terrain: "Random",
-    active_atmosphere: "Random",
+    active_atmosphere: "Noon",
 
     // Density-based spawning - items scale with arena area
     // Values are per 100 square meters
@@ -160,6 +161,10 @@
         tree_weight: 0.60,
         rock_weight: 0.20,
         boulder_weight: 0.20,
+        // Height offsets above terrain (accounts for model pivot points)
+        tree_height_offset: 0.1,
+        rock_height_offset: 0.05,
+        boulder_height_offset: 0.05,
     ),
 
     // Boulder boundary configuration
@@ -172,12 +177,18 @@
         inward_offset: (min: 1.0, max: 3.0, default: 2.0),
         // Maximum rotation variation in radians
         rotation_variation: 3.14159,
+        // Height scale range for boulders
+        height_scale_min: 0.5,
+        height_scale_max: 1.5,
     ),
 
     // Decoration configuration (scale only - counts from density)
     decoration: (
         // Scale multiplier for grass
         grass_scale: (min: 0.5, max: 1.0, default: 0.7),
+        // Height offsets above terrain (prevents z-fighting and clipping)
+        grass_height_offset: 0.02,
+        mushroom_height_offset: 0.02,
     ),
 
     // Theme configuration
@@ -188,6 +199,55 @@
         dead_tree_chance_summer: 0.05,
         // Chance for dead trees in Autumn (0.0-1.0)
         dead_tree_chance_autumn: 0.20,
+    ),
+
+    // Water configuration - island sits in water
+    // water_level: Y position of water plane (instant death when submerged)
+    // water_color: RGBA color of water (semi-transparent blue)
+    // base_elevation: lifts entire island above water (terrain = base + noise)
+    // shore_width_min/max: how wide the shore slope zone is (noise-varied)
+    // shore_slope_noise_scale: noise frequency for organic shore variation
+    // playable_min_height: reference for minimum playable height (validation)
+    water: (
+        water_level: 0.0,
+        water_color: (0.2, 0.4, 0.8, 0.6),
+        base_elevation: 4.0,
+        shore_width_min: 8.0,
+        shore_width_max: 14.0,
+        shore_slope_noise_scale: 3.0,
+        playable_min_height: 2.0,
+    ),
+
+    // Pond configuration (interior water features with gentle slopes)
+    // min/max_count: number of ponds per arena
+    // min/max_diameter: pond size in world units
+    // center_exclusion: no ponds within this distance from arena center
+    // edge_exclusion: no ponds within this distance from arena edge
+    // pond_exclusion: minimum spacing between ponds
+    // slope_degrees: how steep the pond edges slope down (gentler = more gradual)
+    // max_depth: maximum depth below water level
+    // edge_smooth_width: width of smooth transition zone at pond edges
+    ponds: (
+        min_count: 2,
+        max_count: 4,
+        min_diameter: 5.0,
+        max_diameter: 10.0,
+        center_exclusion: 15.0,
+        edge_exclusion: 8.0,
+        pond_exclusion: 6.0,
+        slope_degrees: 25.0,
+        max_depth: 2.0,
+        edge_smooth_width: 1.5,
+    ),
+
+    // Fall death configuration (water-based)
+    // submersion_depth: how far below water level triggers death
+    // respawn_height: Y offset above arena center for respawn
+    // respawn_invulnerability: seconds of invulnerability after respawn
+    fall_death: (
+        submersion_depth: 0.5,
+        respawn_height: 2.0,
+        respawn_invulnerability: 1.5,
     ),
 
     // Mesh subdivisions for terrain detail

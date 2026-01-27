@@ -12,10 +12,10 @@ use crate::states::{GameState, RunState};
 use crate::player::Player;
 use crate::combat::{Health, Team, Hittable, SlowEffect};
 use crate::spells::{SpellCastEvent, SpellType, SpellCooldowns};
-use crate::arena::{ArenaConfig, Obstacle, ObstacleBounds};
+use crate::arena::{ArenaConfig, FallDeath, Obstacle, ObstacleBounds};
 use crate::particles::SpawnParticleEvent;
 use crate::physics::TerrainSampler;
-use crate::effects::spawn_enemy_spawn_light;
+use crate::effects::{spawn_enemy_spawn_light, LightingConfig};
 
 pub use config::EnemyConfig;
 pub use definitions::{EnemyDefinitions, EnemyTypeId};
@@ -289,6 +289,7 @@ fn wave_spawner(
     enemy_assets: Option<Res<EnemyAssets>>,
     enemy_defs: Res<EnemyDefinitions>,
     enemy_config: Res<EnemyConfig>,
+    lighting_config: Res<LightingConfig>,
     obstacles: Query<(&Transform, &ObstacleBounds), With<Obstacle>>,
     mut particle_events: EventWriter<SpawnParticleEvent>,
     terrain_sampler: Res<TerrainSampler>,
@@ -351,7 +352,7 @@ fn wave_spawner(
 
             // Spawn purple particle effect at enemy spawn location
             particle_events.send(SpawnParticleEvent::enemy_spawn(spawn_pos));
-            spawn_enemy_spawn_light(&mut commands, spawn_pos);
+            spawn_enemy_spawn_light(&mut commands, spawn_pos, &lighting_config);
         }
 
         wave_state.wave_number += 1;
@@ -373,7 +374,9 @@ fn find_valid_spawn_position(
 
     for _ in 0..max_attempts {
         let angle = rng.gen_range(0.0..std::f32::consts::TAU);
-        let radius = rng.gen_range(spawn_radius_min..spawn_radius_max);
+        // Use sqrt for uniform distribution in Cartesian space (polar sampling bias fix)
+        let t = rng.gen::<f32>().sqrt();
+        let radius = spawn_radius_min + t * (spawn_radius_max - spawn_radius_min);
         let x = angle.cos() * radius;
         let z = angle.sin() * radius;
         let pos = Vec3::new(x, 0.0, z);
@@ -431,8 +434,14 @@ fn spawn_enemy(
     // Capsule dimensions: radius=0.5, half_length=0.5
     // Total height = 2*radius + 2*half_length = 2.0
     // Center to bottom = radius + half_length = 1.0
+    // Calculate slope-aware height offset to prevent clipping on slopes
+    let base_offset = 2.0; // Base offset for capsule center above terrain
+    let slope = terrain_sampler.calculate_slope(position.x, position.z);
+    let slope_compensation = slope.tan() * 0.5; // radius * tan(slope)
+    let safe_offset = base_offset + slope_compensation.min(0.5); // Cap extra offset at 0.5
+
     // Use terrain sampler to get correct spawn height above terrain
-    let spawn_position = terrain_sampler.get_spawn_position(position.x, position.z, 2.0);
+    let spawn_position = terrain_sampler.get_spawn_position(position.x, position.z, safe_offset);
 
     // Spawn the enemy entity with physics (root entity)
     commands.spawn((
@@ -483,6 +492,7 @@ fn spawn_enemy(
         (
             Team::ENEMY,
             Hittable,
+            FallDeath,
             StateScoped(GameState::Playing),
             Name::new(def.name.clone()),
         ),

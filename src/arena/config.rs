@@ -64,6 +64,32 @@ pub struct AtmospherePreset {
     // Ambient lighting
     pub ambient_color: [f32; 3], // RGB tint
     pub ambient_brightness: f32, // 500-2000 typical
+
+    // Fog settings for atmospheric depth
+    #[serde(default = "default_fog_color")]
+    pub fog_color: [f32; 3],      // RGB 0-1, atmosphere-tinted fog
+    #[serde(default = "default_fog_start")]
+    pub fog_start: f32,           // Distance where fog begins (e.g., 30.0)
+    #[serde(default = "default_fog_end")]
+    pub fog_end: f32,             // Distance where fog is opaque (e.g., 100.0)
+    #[serde(default = "default_fog_density")]
+    pub fog_density: f32,         // Density for atmospheric falloff (0.0-1.0)
+}
+
+fn default_fog_color() -> [f32; 3] {
+    [0.85, 0.9, 1.0]
+}
+
+fn default_fog_start() -> f32 {
+    30.0
+}
+
+fn default_fog_end() -> f32 {
+    100.0
+}
+
+fn default_fog_density() -> f32 {
+    0.02
 }
 
 impl Default for AtmospherePreset {
@@ -81,6 +107,10 @@ impl Default for AtmospherePreset {
             sun_illuminance: 3000.0,
             ambient_color: [0.5, 0.55, 0.65],
             ambient_brightness: 1800.0,
+            fog_color: [0.85, 0.9, 1.0],  // Slight blue haze
+            fog_start: 30.0,
+            fog_end: 100.0,
+            fog_density: 0.02,
         }
     }
 }
@@ -105,6 +135,10 @@ pub fn default_atmosphere_presets() -> Vec<AtmospherePreset> {
             sun_illuminance: 1800.0,
             ambient_color: [0.6, 0.5, 0.5],
             ambient_brightness: 1200.0,
+            fog_color: [1.0, 0.9, 0.8],  // Warm peachy fog
+            fog_start: 25.0,
+            fog_end: 90.0,
+            fog_density: 0.025,
         },
         // Noon - bright white overhead
         AtmospherePreset {
@@ -120,6 +154,10 @@ pub fn default_atmosphere_presets() -> Vec<AtmospherePreset> {
             sun_illuminance: 3000.0,
             ambient_color: [0.5, 0.55, 0.65],
             ambient_brightness: 1800.0,
+            fog_color: [0.85, 0.9, 1.0],  // Slight blue haze
+            fog_start: 30.0,
+            fog_end: 100.0,
+            fog_density: 0.02,
         },
         // Dusk - red-orange light from West, low angle
         AtmospherePreset {
@@ -135,6 +173,10 @@ pub fn default_atmosphere_presets() -> Vec<AtmospherePreset> {
             sun_illuminance: 1500.0,
             ambient_color: [0.55, 0.45, 0.45],
             ambient_brightness: 1000.0,
+            fog_color: [1.0, 0.7, 0.6],  // Orange/pink tint
+            fog_start: 20.0,
+            fog_end: 80.0,
+            fog_density: 0.03,
         },
         // Night - blue moonlight, dark
         AtmospherePreset {
@@ -150,6 +192,10 @@ pub fn default_atmosphere_presets() -> Vec<AtmospherePreset> {
             sun_illuminance: 400.0,
             ambient_color: [0.3, 0.35, 0.5],
             ambient_brightness: 400.0,
+            fog_color: [0.3, 0.35, 0.5],  // Deep blue fog
+            fog_start: 15.0,
+            fog_end: 70.0,
+            fog_density: 0.035,
         },
     ]
 }
@@ -242,6 +288,27 @@ pub struct ObstacleConfigData {
     pub tree_weight: f32,
     pub rock_weight: f32,
     pub boulder_weight: f32,
+    /// Height offset for trees above terrain (accounts for model pivot)
+    #[serde(default = "default_tree_height_offset")]
+    pub tree_height_offset: f32,
+    /// Height offset for rocks above terrain
+    #[serde(default = "default_rock_height_offset")]
+    pub rock_height_offset: f32,
+    /// Height offset for boulders above terrain
+    #[serde(default = "default_boulder_height_offset")]
+    pub boulder_height_offset: f32,
+}
+
+fn default_tree_height_offset() -> f32 {
+    0.1
+}
+
+fn default_rock_height_offset() -> f32 {
+    0.05
+}
+
+fn default_boulder_height_offset() -> f32 {
+    0.05
 }
 
 impl Default for ObstacleConfigData {
@@ -257,6 +324,9 @@ impl Default for ObstacleConfigData {
             tree_weight: 0.60,
             rock_weight: 0.20,
             boulder_weight: 0.20,
+            tree_height_offset: 0.1,
+            rock_height_offset: 0.05,
+            boulder_height_offset: 0.05,
         }
     }
 }
@@ -297,6 +367,20 @@ impl Default for BoundaryConfigData {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DecorationConfigData {
     pub grass_scale: Parameter<f32>,
+    /// Height offset for grass above terrain
+    #[serde(default = "default_grass_height_offset")]
+    pub grass_height_offset: f32,
+    /// Height offset for mushrooms above terrain
+    #[serde(default = "default_mushroom_height_offset")]
+    pub mushroom_height_offset: f32,
+}
+
+fn default_grass_height_offset() -> f32 {
+    0.02
+}
+
+fn default_mushroom_height_offset() -> f32 {
+    0.02
 }
 
 impl Default for DecorationConfigData {
@@ -307,6 +391,8 @@ impl Default for DecorationConfigData {
                 max: 1.0,
                 default: 0.7,
             },
+            grass_height_offset: 0.02,
+            mushroom_height_offset: 0.02,
         }
     }
 }
@@ -317,6 +403,133 @@ pub struct ThemeConfigData {
     pub active_theme: BiomeTheme,
     pub dead_tree_chance_summer: f32,
     pub dead_tree_chance_autumn: f32,
+}
+
+/// Water configuration for the island-in-water terrain
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WaterConfig {
+    pub water_level: f32,
+    pub water_color: [f32; 4],
+    #[serde(default = "default_base_elevation")]
+    pub base_elevation: f32,
+    pub shore_width_min: f32,
+    pub shore_width_max: f32,
+    pub shore_slope_noise_scale: f32,
+    pub playable_min_height: f32,
+}
+
+fn default_base_elevation() -> f32 {
+    4.0
+}
+
+impl Default for WaterConfig {
+    fn default() -> Self {
+        Self {
+            water_level: 0.0,
+            water_color: [0.2, 0.4, 0.8, 0.6],
+            base_elevation: 4.0,
+            shore_width_min: 8.0,
+            shore_width_max: 14.0,
+            shore_slope_noise_scale: 3.0,
+            playable_min_height: 2.0,
+        }
+    }
+}
+
+/// Pond configuration (interior water features)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PondConfig {
+    pub min_count: u32,
+    pub max_count: u32,
+    pub min_diameter: f32,
+    pub max_diameter: f32,
+    pub center_exclusion: f32,
+    pub edge_exclusion: f32,
+    pub pond_exclusion: f32,
+    pub slope_degrees: f32,
+    pub max_depth: f32,
+    /// Width of the smooth transition zone at pond edges
+    #[serde(default = "default_edge_smooth_width")]
+    pub edge_smooth_width: f32,
+}
+
+fn default_edge_smooth_width() -> f32 {
+    1.5
+}
+
+impl Default for PondConfig {
+    fn default() -> Self {
+        Self {
+            min_count: 2,
+            max_count: 4,
+            min_diameter: 5.0,
+            max_diameter: 10.0,
+            center_exclusion: 15.0,
+            edge_exclusion: 8.0,
+            pond_exclusion: 6.0,
+            slope_degrees: 25.0,
+            max_depth: 2.0,
+            edge_smooth_width: 1.5,
+        }
+    }
+}
+
+/// Runtime water settings resource
+#[derive(Resource, Debug, Clone)]
+pub struct WaterSettings {
+    pub water_level: f32,
+    pub water_color: [f32; 4],
+    pub base_elevation: f32,
+    pub shore_width_min: f32,
+    pub shore_width_max: f32,
+    pub shore_slope_noise_scale: f32,
+    pub playable_min_height: f32,
+}
+
+impl Default for WaterSettings {
+    fn default() -> Self {
+        Self {
+            water_level: 0.0,
+            water_color: [0.2, 0.4, 0.8, 0.6],
+            base_elevation: 4.0,
+            shore_width_min: 8.0,
+            shore_width_max: 14.0,
+            shore_slope_noise_scale: 3.0,
+            playable_min_height: 2.0,
+        }
+    }
+}
+
+impl WaterSettings {
+    pub fn from_config(config: &WaterConfig) -> Self {
+        Self {
+            water_level: config.water_level,
+            water_color: config.water_color,
+            base_elevation: config.base_elevation,
+            shore_width_min: config.shore_width_min,
+            shore_width_max: config.shore_width_max,
+            shore_slope_noise_scale: config.shore_slope_noise_scale,
+            playable_min_height: config.playable_min_height,
+        }
+    }
+}
+
+/// Fall death configuration (water-based)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FallDeathConfig {
+    pub submersion_depth: f32,
+    pub respawn_height: f32,
+    pub respawn_invulnerability: f32,
+}
+
+impl Default for FallDeathConfig {
+    fn default() -> Self {
+        Self {
+            submersion_depth: 0.5,
+            respawn_height: 2.0,
+            respawn_invulnerability: 1.5,
+        }
+    }
 }
 
 impl Default for ThemeConfigData {
@@ -353,6 +566,14 @@ pub struct ArenaConfigFile {
     pub decoration: DecorationConfigData,
     pub themes: ThemeConfigData,
 
+    // Water and terrain features
+    #[serde(default)]
+    pub water: WaterConfig,
+    #[serde(default)]
+    pub ponds: PondConfig,
+    #[serde(default)]
+    pub fall_death: FallDeathConfig,
+
     // Generation settings
     pub subdivisions: u32,
     pub seed: Option<u64>,
@@ -388,22 +609,22 @@ impl Default for ArenaConfigFile {
             terrain_presets: vec![
                 TerrainPreset {
                     name: "Flat".to_string(),
-                    height_scale: 0.5,
-                    noise_scale: 0.06,
+                    height_scale: 0.8,
+                    noise_scale: 0.04,
                     octaves: 2,
                     edge_falloff: 0.3,
                 },
                 TerrainPreset {
                     name: "Rolling".to_string(),
-                    height_scale: 1.5,
-                    noise_scale: 0.08,
+                    height_scale: 2.4,
+                    noise_scale: 0.055,
                     octaves: 3,
                     edge_falloff: 0.5,
                 },
                 TerrainPreset {
                     name: "Hilly".to_string(),
-                    height_scale: 2.5,
-                    noise_scale: 0.10,
+                    height_scale: 4.0,
+                    noise_scale: 0.07,
                     octaves: 4,
                     edge_falloff: 0.7,
                 },
@@ -417,6 +638,9 @@ impl Default for ArenaConfigFile {
             boundary: BoundaryConfigData::default(),
             decoration: DecorationConfigData::default(),
             themes: ThemeConfigData::default(),
+            water: WaterConfig::default(),
+            ponds: PondConfig::default(),
+            fall_death: FallDeathConfig::default(),
             subdivisions: 64,
             seed: None,
         }
@@ -560,6 +784,12 @@ pub struct ArenaConfig {
     pub sun_illuminance: f32,
     pub ambient_color: [f32; 3],
     pub ambient_brightness: f32,
+
+    // Fog settings
+    pub fog_color: [f32; 3],
+    pub fog_start: f32,
+    pub fog_end: f32,
+    pub fog_density: f32,
 }
 
 impl ArenaConfig {
@@ -603,6 +833,10 @@ impl ArenaConfig {
             sun_illuminance: atmosphere_preset.sun_illuminance,
             ambient_color: atmosphere_preset.ambient_color,
             ambient_brightness: atmosphere_preset.ambient_brightness,
+            fog_color: atmosphere_preset.fog_color,
+            fog_start: atmosphere_preset.fog_start,
+            fog_end: atmosphere_preset.fog_end,
+            fog_density: atmosphere_preset.fog_density,
         }
     }
 
@@ -622,6 +856,9 @@ pub struct ObstacleConfig {
     pub tree_weight: f32,
     pub rock_weight: f32,
     pub boulder_weight: f32,
+    pub tree_height_offset: f32,
+    pub rock_height_offset: f32,
+    pub boulder_height_offset: f32,
 }
 
 impl ObstacleConfig {
@@ -634,6 +871,9 @@ impl ObstacleConfig {
             tree_weight: file.obstacles.tree_weight,
             rock_weight: file.obstacles.rock_weight,
             boulder_weight: file.obstacles.boulder_weight,
+            tree_height_offset: file.obstacles.tree_height_offset,
+            rock_height_offset: file.obstacles.rock_height_offset,
+            boulder_height_offset: file.obstacles.boulder_height_offset,
         }
     }
 }
@@ -669,6 +909,8 @@ pub struct DecorationConfig {
     pub mushroom_count: u32,
     pub grass_scale: f32,
     pub dead_tree_chance: f32,
+    pub grass_height_offset: f32,
+    pub mushroom_height_offset: f32,
 }
 
 impl DecorationConfig {
@@ -684,6 +926,8 @@ impl DecorationConfig {
             mushroom_count: file.density.mushroom_count(area),
             grass_scale: file.decoration.grass_scale.get_default(),
             dead_tree_chance,
+            grass_height_offset: file.decoration.grass_height_offset,
+            mushroom_height_offset: file.decoration.mushroom_height_offset,
         }
     }
 }
