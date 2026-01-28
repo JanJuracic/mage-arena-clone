@@ -1,9 +1,12 @@
 pub mod assets;
 pub mod boundary;
 pub mod config;
+pub mod fall_death;
+pub mod ponds;
 pub mod shape;
 pub mod spawning;
 mod terrain;
+pub mod water;
 
 use bevy::pbr::{CascadeShadowConfigBuilder, NotShadowCaster, NotShadowReceiver};
 use bevy::prelude::*;
@@ -17,13 +20,17 @@ use crate::physics::TerrainSampler;
 use crate::states::GameState;
 
 use assets::{load_terrain_assets, TerrainAssets};
-use boundary::spawn_boulder_boundary;
-use config::{ArenaConfigFile, ArenaConfigFileRes, BoundaryConfig, DecorationConfig, ObstacleConfig};
+use config::{ArenaConfigFile, ArenaConfigFileRes, BoundaryConfig, DecorationConfig, ObstacleConfig, WaterSettings};
+use fall_death::{FallDeathPlugin, FallDeathSettings};
+use ponds::TerrainPonds;
 use spawning::{spawn_grass, spawn_mushrooms, spawn_obstacles};
 use terrain::{generate_heights_matrix, generate_terrain_mesh, TerrainMeshConfig};
+use water::spawn_water_plane;
 
 // Re-export commonly used types for external modules
 pub use config::{ArenaConfig, BiomeTheme};
+pub use fall_death::{FallDeath, FallDeathEvent, RespawnInvulnerability};
+pub use ponds::TerrainPonds as TerrainPondsExport;
 pub use shape::ArenaShape;
 pub use spawning::{Obstacle, ObstacleBounds};
 
@@ -80,10 +87,17 @@ impl Plugin for ArenaPlugin {
         let boundary_config = BoundaryConfig::from_config_file(&config_file);
         let decoration_config = DecorationConfig::from_config_file(&config_file, theme, area);
 
+        // Create water settings
+        let water_settings = WaterSettings::from_config(&config_file.water);
+
+        // Create fall death settings (water-based)
+        let fall_death_settings = FallDeathSettings::from_config(&config_file.fall_death, water_settings.water_level);
+
         // Create TerrainSampler from config
-        let terrain_sampler = TerrainSampler::from_config(&arena_config);
+        let terrain_sampler = TerrainSampler::from_config(&arena_config, &water_settings);
 
         app.add_plugins(MaterialPlugin::<GradientSkyMaterial>::default())
+            .add_plugins(FallDeathPlugin)
             // Store raw config file for reference
             .insert_resource(ArenaConfigFileRes(config_file))
             // Runtime configs
@@ -91,7 +105,11 @@ impl Plugin for ArenaPlugin {
             .insert_resource(obstacle_config)
             .insert_resource(boundary_config)
             .insert_resource(decoration_config)
+            .insert_resource(water_settings)
             .insert_resource(terrain_sampler)
+            .insert_resource(fall_death_settings)
+            // Initialize empty terrain ponds (will be regenerated each arena)
+            .init_resource::<TerrainPonds>()
             // Asset loading
             .init_resource::<TerrainAssets>()
             .add_systems(Startup, load_terrain_assets)
@@ -109,7 +127,10 @@ fn regenerate_arena_config(
     mut arena_config: ResMut<ArenaConfig>,
     mut obstacle_config: ResMut<ObstacleConfig>,
     mut decoration_config: ResMut<DecorationConfig>,
+    mut water_settings: ResMut<WaterSettings>,
     mut terrain_sampler: ResMut<TerrainSampler>,
+    mut terrain_ponds: ResMut<TerrainPonds>,
+    mut fall_death_settings: ResMut<FallDeathSettings>,
 ) {
     let config_file = &config_file_res.0;
 
@@ -137,13 +158,32 @@ fn regenerate_arena_config(
         &atmosphere_preset,
     );
 
+    // Update water settings
+    *water_settings = WaterSettings::from_config(&config_file.water);
+
+    // Generate terrain ponds
+    *terrain_ponds = TerrainPonds::generate(
+        &config_file.ponds,
+        &arena_config.shape,
+        &mut rng,
+    );
+
+    info!(
+        "Generated {} terrain ponds",
+        terrain_ponds.ponds.len()
+    );
+
     // Update dependent configs
     let area = arena_config.area;
     *obstacle_config = ObstacleConfig::from_config_file(config_file, area);
     *decoration_config = DecorationConfig::from_config_file(config_file, theme, area);
 
-    // Update terrain sampler
-    *terrain_sampler = TerrainSampler::from_config(&arena_config);
+    // Update fall death settings with water level
+    *fall_death_settings = FallDeathSettings::from_config(&config_file.fall_death, water_settings.water_level);
+
+    // Update terrain sampler with ponds
+    *terrain_sampler = TerrainSampler::from_config(&arena_config, &water_settings);
+    terrain_sampler.set_ponds(terrain_ponds.clone(), &config_file.ponds);
 
     info!(
         "Arena regenerated: seed={}, theme={:?}, size='{}', terrain='{}', atmosphere='{}'",
@@ -160,18 +200,25 @@ fn spawn_arena(
     mut materials: ResMut<Assets<StandardMaterial>>,
     arena_config: Res<ArenaConfig>,
     obstacle_config: Res<ObstacleConfig>,
-    boundary_config: Res<BoundaryConfig>,
     decoration_config: Res<DecorationConfig>,
+    water_settings: Res<WaterSettings>,
     terrain_assets: Res<TerrainAssets>,
     terrain_sampler: Res<TerrainSampler>,
+    terrain_ponds: Res<TerrainPonds>,
+    config_file_res: Res<ArenaConfigFileRes>,
 ) {
     // Create seeded RNG for reproducible generation
     let mut rng = ChaCha8Rng::seed_from_u64(arena_config.seed);
 
     let arena_radius = arena_config.radius();
 
-    // Generate terrain mesh configuration
-    let terrain_mesh_config = TerrainMeshConfig::from_arena_config(&arena_config);
+    // Generate terrain mesh configuration with ponds
+    let terrain_mesh_config = TerrainMeshConfig::from_arena_config(
+        &arena_config,
+        terrain_ponds.clone(),
+        &config_file_res.0.ponds,
+        &water_settings,
+    );
     let terrain_mesh = generate_terrain_mesh(&terrain_mesh_config);
     let heights = generate_heights_matrix(&terrain_mesh_config);
 
@@ -209,14 +256,13 @@ fn spawn_arena(
         Name::new("Terrain Collider"),
     ));
 
-    // Spawn boulder boundary wall following the irregular contour
-    spawn_boulder_boundary(
+    // Spawn water plane at Y=0
+    spawn_water_plane(
         &mut commands,
+        &mut meshes,
+        &mut materials,
         &arena_config.shape,
-        &boundary_config,
-        &terrain_assets,
-        &terrain_sampler,
-        &mut rng,
+        &water_settings,
     );
 
     // Spawn terrain obstacles (trees and rocks) with density-based counts

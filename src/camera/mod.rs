@@ -1,18 +1,25 @@
+mod outline;
+
 use bevy::core_pipeline::bloom::Bloom;
 use bevy::core_pipeline::post_process::ChromaticAberration;
 use bevy::core_pipeline::tonemapping::Tonemapping;
 use bevy::input::mouse::AccumulatedMouseMotion;
+use bevy::pbr::DistanceFog;
 use bevy::prelude::*;
 use bevy::window::CursorGrabMode;
 
+use crate::arena::ArenaConfig;
 use crate::states::GameState;
 use crate::player::Player;
+
+pub use outline::{OutlinePostProcessPlugin, OutlineSettings};
 
 pub struct CameraPlugin;
 
 impl Plugin for CameraPlugin {
     fn build(&self, app: &mut App) {
-        app.add_event::<ScreenShakeEvent>()
+        app.add_plugins(OutlinePostProcessPlugin)
+            .add_event::<ScreenShakeEvent>()
             .add_systems(OnEnter(GameState::Playing), (spawn_camera, grab_cursor))
             .add_systems(OnExit(GameState::Playing), release_cursor)
             .add_systems(OnEnter(GameState::Menu), release_cursor)
@@ -65,7 +72,27 @@ pub struct ScreenShake {
     pub offset: Vec3,
 }
 
-fn spawn_camera(mut commands: Commands) {
+fn spawn_camera(mut commands: Commands, arena_config: Res<ArenaConfig>) {
+    // Create atmosphere-aware fog from config
+    let fog = DistanceFog {
+        color: Color::srgb(
+            arena_config.fog_color[0],
+            arena_config.fog_color[1],
+            arena_config.fog_color[2],
+        ),
+        falloff: bevy::pbr::FogFalloff::Linear {
+            start: arena_config.fog_start,
+            end: arena_config.fog_end,
+        },
+        // Tint fog with sun color for atmospheric scattering effect
+        directional_light_color: Color::srgb(
+            arena_config.sun_color[0],
+            arena_config.sun_color[1],
+            arena_config.sun_color[2],
+        ),
+        directional_light_exponent: 8.0,
+    };
+
     // First-person camera at eye level
     commands.spawn((
         Camera3d::default(),
@@ -87,6 +114,8 @@ fn spawn_camera(mut commands: Commands) {
             intensity: 0.02, // Slight RGB fringing
             ..default()
         },
+        fog, // Atmospheric fog
+        OutlineSettings::subtle(), // Subtle depth-based outlines
         GameCamera,
         CameraSensitivity::default(),
         CameraYaw(0.0),

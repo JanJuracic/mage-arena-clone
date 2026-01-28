@@ -1,0 +1,200 @@
+// Particle Explosion Effects Configuration
+// Controls one-shot burst effects like explosions, impacts, and spawns
+//
+// Gradient format: list of (time, value) where time is 0.0-1.0 (particle lifetime fraction)
+// color_gradient: (time, (R, G, B, A)) where RGBA are 0.0-1.0
+// size_gradient: (time, size) where size is in world units
+(
+    effects: {
+        // Fire explosion - bright flames that fade to embers
+        "fire": (
+            color_gradient: [
+                (0.0, (1.0, 1.0, 0.6, 1.0)),   // Bright yellow-white core
+                (0.15, (1.0, 0.8, 0.2, 1.0)),  // Yellow
+                (0.4, (1.0, 0.4, 0.1, 1.0)),   // Orange
+                (0.7, (0.9, 0.2, 0.05, 0.8)),  // Red-orange
+                (1.0, (0.3, 0.1, 0.05, 0.0)),  // Dark embers, fade out
+            ],
+            size_gradient: [
+                (0.0, 0.08),
+                (0.3, 0.15),
+                (0.7, 0.1),
+                (1.0, 0.0),
+            ],
+            particle_count: 300.0,
+            speed: 12.0,
+            lifetime: 0.9,
+            spawn_radius: 0.5,
+            drag: 3.0,
+            gravity: (0.0, -8.0, 0.0),
+            circle_spawn: false,
+            spawn_offset: (0.0, 0.0, 0.0),
+        ),
+
+        // Smoke - dark particles that rise and expand
+        "smoke": (
+            color_gradient: [
+                (0.0, (0.3, 0.25, 0.2, 0.6)),
+                (0.3, (0.25, 0.22, 0.18, 0.5)),
+                (0.6, (0.2, 0.18, 0.15, 0.3)),
+                (1.0, (0.15, 0.13, 0.1, 0.0)),
+            ],
+            size_gradient: [
+                (0.0, 0.1),
+                (0.3, 0.25),
+                (0.7, 0.35),
+                (1.0, 0.4),
+            ],
+            particle_count: 80.0,
+            speed: 4.0,
+            lifetime: 1.5,
+            spawn_radius: 0.6,
+            drag: 2.5,
+            gravity: (0.0, 3.0, 0.0),  // Rises upward
+            circle_spawn: false,
+            spawn_offset: (0.0, 0.0, 0.0),
+        ),
+
+        // Frost explosion - icy shards that drift upward
+        "frost": (
+            color_gradient: [
+                (0.0, (1.0, 1.0, 1.0, 1.0)),   // White core
+                (0.2, (0.7, 0.9, 1.0, 1.0)),   // Light cyan
+                (0.5, (0.4, 0.7, 1.0, 0.9)),   // Medium blue
+                (0.8, (0.2, 0.5, 0.9, 0.6)),   // Deeper blue
+                (1.0, (0.1, 0.3, 0.7, 0.0)),   // Dark blue, fade out
+            ],
+            size_gradient: [
+                (0.0, 0.06),
+                (0.2, 0.12),
+                (0.6, 0.08),
+                (1.0, 0.0),
+            ],
+            particle_count: 250.0,
+            speed: 8.0,
+            lifetime: 1.0,
+            spawn_radius: 0.4,
+            drag: 4.0,
+            gravity: (0.0, 2.0, 0.0),  // Slight upward drift
+            circle_spawn: false,
+            spawn_offset: (0.0, 0.0, 0.0),
+        ),
+
+        // Arcane explosion - magical purple burst in a ring
+        "arcane": (
+            color_gradient: [
+                (0.0, (0.8, 0.4, 1.0, 1.0)),
+                (0.5, (0.6, 0.2, 0.9, 0.7)),
+                (1.0, (0.3, 0.1, 0.5, 0.0)),
+            ],
+            size_gradient: [
+                (0.0, 0.06),
+                (0.5, 0.1),
+                (1.0, 0.03),
+            ],
+            particle_count: 200.0,
+            speed: 8.0,
+            lifetime: 0.5,
+            spawn_radius: 0.5,
+            drag: 2.0,
+            gravity: (0.0, 0.0, 0.0),
+            circle_spawn: true,  // Ring shape on XZ plane
+            spawn_offset: (0.0, 0.0, 0.0),
+        ),
+
+        // Hit spark - quick bright flash for impacts
+        "hit_spark": (
+            color_gradient: [
+                (0.0, (1.0, 1.0, 1.0, 1.0)),
+                (0.2, (0.9, 0.7, 1.0, 1.0)),
+                (0.5, (0.7, 0.3, 1.0, 0.9)),
+                (1.0, (0.4, 0.1, 0.6, 0.0)),
+            ],
+            size_gradient: [
+                (0.0, 0.05),
+                (0.3, 0.1),
+                (1.0, 0.0),
+            ],
+            particle_count: 150.0,
+            speed: 8.0,
+            lifetime: 0.5,
+            spawn_radius: 0.2,
+            drag: 4.0,
+            gravity: (0.0, 0.0, 0.0),
+            circle_spawn: false,
+            spawn_offset: (0.0, 0.0, 0.0),
+        ),
+
+        // Muzzle flash - quick bright puff at spell cast
+        "muzzle_flash": (
+            color_gradient: [
+                (0.0, (1.0, 0.9, 0.7, 1.0)),
+                (0.3, (1.0, 0.6, 0.3, 0.6)),
+                (1.0, (0.8, 0.3, 0.1, 0.0)),
+            ],
+            size_gradient: [
+                (0.0, 0.08),
+                (0.2, 0.12),
+                (1.0, 0.0),
+            ],
+            particle_count: 30.0,
+            speed: 2.0,
+            lifetime: 0.15,
+            spawn_radius: 0.05,
+            drag: 0.0,
+            gravity: (0.0, 0.0, 0.0),
+            circle_spawn: false,
+            spawn_offset: (0.0, 0.0, 0.0),
+        ),
+
+        // Enemy death - red-black dissipation
+        "enemy_death": (
+            color_gradient: [
+                (0.0, (1.0, 0.2, 0.1, 1.0)),
+                (0.2, (0.8, 0.1, 0.05, 0.9)),
+                (0.5, (0.4, 0.05, 0.02, 0.7)),
+                (0.7, (0.15, 0.1, 0.1, 0.5)),
+                (1.0, (0.05, 0.03, 0.03, 0.0)),
+            ],
+            size_gradient: [
+                (0.0, 0.05),
+                (0.3, 0.1),
+                (0.7, 0.125),
+                (1.0, 0.075),
+            ],
+            particle_count: 200.0,
+            speed: 3.0,
+            lifetime: 1.2,
+            spawn_radius: 0.5,
+            drag: 2.0,
+            gravity: (0.0, -4.0, 0.0),
+            circle_spawn: false,
+            spawn_offset: (0.0, 0.5, 0.0),  // Offset upward from feet
+        ),
+
+        // Enemy spawn - purple magical appearance
+        "enemy_spawn": (
+            color_gradient: [
+                (0.0, (0.9, 0.5, 1.0, 1.0)),
+                (0.2, (0.7, 0.3, 0.9, 0.9)),
+                (0.5, (0.5, 0.1, 0.8, 0.7)),
+                (0.8, (0.3, 0.05, 0.5, 0.4)),
+                (1.0, (0.1, 0.0, 0.2, 0.0)),
+            ],
+            size_gradient: [
+                (0.0, 0.3),
+                (0.3, 0.5),
+                (0.7, 0.35),
+                (1.0, 0.0),
+            ],
+            particle_count: 300.0,
+            speed: 8.0,
+            lifetime: 1.0,
+            spawn_radius: 2.0,
+            drag: 2.0,
+            gravity: (0.0, 8.0, 0.0),  // Strong upward motion
+            circle_spawn: true,  // Ring on ground
+            spawn_offset: (0.0, 0.0, 0.0),
+        ),
+    },
+)

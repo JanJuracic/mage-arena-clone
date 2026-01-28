@@ -1,10 +1,18 @@
+pub mod config;
+
 use bevy::prelude::*;
+
+pub use config::LightingConfig;
 
 pub struct EffectsPlugin;
 
 impl Plugin for EffectsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, update_temporary_lights);
+        // Load lighting config (falls back to defaults if file missing)
+        let lighting_config = LightingConfig::load();
+
+        app.insert_resource(lighting_config)
+            .add_systems(Update, update_temporary_lights);
     }
 }
 
@@ -54,15 +62,39 @@ pub fn spawn_temporary_light(
     )).id()
 }
 
-// Preset spawners
-pub fn spawn_fireball_explosion_light(commands: &mut Commands, position: Vec3) -> Entity {
-    spawn_temporary_light(commands, position, Color::srgb(1.0, 0.5, 0.1), 3500.0, 8.0, 0.2)
+// Preset spawners - use config values when available
+pub fn spawn_fireball_explosion_light(commands: &mut Commands, position: Vec3, config: &LightingConfig) -> Entity {
+    let data = config.explosion_light_or_default("fireball");
+    spawn_temporary_light(
+        commands,
+        position,
+        Color::srgb(data.color.0, data.color.1, data.color.2),
+        data.intensity,
+        data.range,
+        data.duration,
+    )
 }
 
-pub fn spawn_frost_explosion_light(commands: &mut Commands, position: Vec3) -> Entity {
-    spawn_temporary_light(commands, position, Color::srgb(0.6, 0.9, 1.0), 3000.0, 7.0, 0.2)
+pub fn spawn_frost_explosion_light(commands: &mut Commands, position: Vec3, config: &LightingConfig) -> Entity {
+    let data = config.explosion_light_or_default("frost");
+    spawn_temporary_light(
+        commands,
+        position,
+        Color::srgb(data.color.0, data.color.1, data.color.2),
+        data.intensity,
+        data.range,
+        data.duration,
+    )
 }
 
-pub fn spawn_enemy_spawn_light(commands: &mut Commands, position: Vec3) -> Entity {
-    spawn_temporary_light(commands, position, Color::srgb(0.9, 0.5, 1.0), 3500.0, 6.0, 0.25)
+pub fn spawn_enemy_spawn_light(commands: &mut Commands, position: Vec3, config: &LightingConfig) -> Entity {
+    let data = config.explosion_light_or_default("enemy_spawn");
+    spawn_temporary_light(
+        commands,
+        position,
+        Color::srgb(data.color.0, data.color.1, data.color.2),
+        data.intensity,
+        data.range,
+        data.duration,
+    )
 }

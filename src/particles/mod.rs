@@ -1,7 +1,14 @@
+pub mod ambient;
+pub mod config;
+
 use bevy::prelude::*;
 use bevy_hanabi::prelude::*;
+use bevy_hanabi::ScalarType;
 
 use crate::states::GameState;
+
+pub use config::{ParticleExplosionsConfig, ParticleTrailsConfig};
+pub use ambient::AmbientParticlePlugin;
 
 pub struct ParticlePlugin;
 
@@ -11,7 +18,14 @@ pub struct ParticleSet;
 
 impl Plugin for ParticlePlugin {
     fn build(&self, app: &mut App) {
+        // Load particle configs (fall back to defaults if files missing)
+        let explosions_config = ParticleExplosionsConfig::load();
+        let trails_config = ParticleTrailsConfig::load();
+
         app.add_plugins(HanabiPlugin)
+            .add_plugins(AmbientParticlePlugin) // Add ambient floating particles
+            .insert_resource(explosions_config)
+            .insert_resource(trails_config)
             .add_event::<SpawnParticleEvent>()
             // Warmup system runs once when entering Playing state to initialize GPU resources
             // This works around bevy_hanabi issue #319 where first spawn doesn't emit particles
@@ -279,6 +293,22 @@ impl ExplosionConfig {
     pub fn duration(&self) -> f32 {
         self.lifetime + 0.2
     }
+
+    /// Create an ExplosionConfig from loaded config data
+    pub fn from_config(data: &config::ExplosionEffectData) -> Self {
+        Self {
+            color_gradient: data.to_color_gradient(),
+            size_gradient: data.to_size_gradient(),
+            particle_count: data.particle_count,
+            speed: data.speed,
+            lifetime: data.lifetime,
+            spawn_radius: data.spawn_radius,
+            drag: data.drag,
+            gravity: data.gravity_vec(),
+            circle_spawn: data.circle_spawn,
+            spawn_offset: data.spawn_offset_vec(),
+        }
+    }
 }
 
 /// Configuration for trail-style effects (continuous stream)
@@ -367,6 +397,19 @@ impl TrailConfig {
     pub fn duration(&self) -> f32 {
         self.lifetime + 0.1
     }
+
+    /// Create a TrailConfig from loaded config data
+    pub fn from_config(data: &config::TrailEffectData) -> Self {
+        Self {
+            color_gradient: data.to_color_gradient(),
+            size_gradient: data.to_size_gradient(),
+            spawn_rate: data.spawn_rate,
+            speed: data.speed,
+            lifetime: data.lifetime,
+            spawn_radius: data.spawn_radius,
+            gravity: data.gravity_vec(),
+        }
+    }
 }
 
 /// Type of particle effect to spawn
@@ -454,9 +497,20 @@ impl SpawnParticleEvent {
 fn create_explosion(config: &ExplosionConfig) -> EffectAsset {
     let writer = ExprWriter::new();
 
-    // Set lifetime
-    let lifetime = writer.lit(config.lifetime).expr();
-    let init_lifetime = SetAttributeModifier::new(Attribute::LIFETIME, lifetime);
+    // Random lifetime: base_lifetime * (0.75 + rand * 0.5) for ±25% variation
+    let lifetime_rand = writer.rand(ScalarType::Float) * writer.lit(0.5) + writer.lit(0.75);
+    let lifetime_varied = writer.lit(config.lifetime) * lifetime_rand;
+    let init_lifetime = SetAttributeModifier::new(Attribute::LIFETIME, lifetime_varied.expr());
+
+    // Random speed: base_speed * (0.75 + rand * 0.5) for ±25% variation
+    // Pre-compute the expression handle so it can be used in both branches
+    let speed_rand = writer.rand(ScalarType::Float) * writer.lit(0.5) + writer.lit(0.75);
+    let speed_varied = (writer.lit(config.speed) * speed_rand).expr();
+
+    // Random size scale: (0.75 + rand * 0.5) for ±25% variation
+    // SizeOverLifetimeModifier multiplies gradient values by the SIZE attribute
+    let size_rand = writer.rand(ScalarType::Float) * writer.lit(0.5) + writer.lit(0.75);
+    let init_size = SetAttributeModifier::new(Attribute::SIZE, size_rand.expr());
 
     // Create drag and gravity modifiers
     let drag = LinearDragModifier {
@@ -475,7 +529,7 @@ fn create_explosion(config: &ExplosionConfig) -> EffectAsset {
         // Velocity spreads outward from center - each particle gets its own random direction
         let init_vel = SetVelocitySphereModifier {
             center: writer.lit(config.spawn_offset).expr(),
-            speed: writer.lit(config.speed).expr(),
+            speed: speed_varied,
         };
 
         let module = writer.finish();
@@ -488,6 +542,7 @@ fn create_explosion(config: &ExplosionConfig) -> EffectAsset {
         .init(init_pos)
         .init(init_vel)
         .init(init_lifetime)
+        .init(init_size)
         .update(drag)
         .update(gravity)
         .render(OrientModifier::new(OrientMode::FaceCameraPosition))
@@ -505,7 +560,7 @@ fn create_explosion(config: &ExplosionConfig) -> EffectAsset {
         // Velocity spreads outward from center - each particle gets its own random direction
         let init_vel = SetVelocitySphereModifier {
             center: writer.lit(config.spawn_offset).expr(),
-            speed: writer.lit(config.speed).expr(),
+            speed: speed_varied,
         };
 
         let module = writer.finish();
@@ -518,6 +573,7 @@ fn create_explosion(config: &ExplosionConfig) -> EffectAsset {
         .init(init_pos)
         .init(init_vel)
         .init(init_lifetime)
+        .init(init_size)
         .update(drag)
         .update(gravity)
         .render(OrientModifier::new(OrientMode::FaceCameraPosition))

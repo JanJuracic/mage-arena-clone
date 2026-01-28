@@ -56,7 +56,7 @@ impl ArenaShape {
     /// Check if a point (x, z) is inside the arena boundary.
     pub fn contains(&self, x: f32, z: f32) -> bool {
         let distance = (x * x + z * z).sqrt();
-        let angle = z.atan2(x);
+        let angle = x.atan2(z);
         let radius_at_point = self.radius_at_angle(angle);
         distance <= radius_at_point
     }
@@ -64,7 +64,7 @@ impl ArenaShape {
     /// Check if a point is inside with a margin (positive = inside, negative = outside buffer)
     pub fn contains_with_margin(&self, x: f32, z: f32, margin: f32) -> bool {
         let distance = (x * x + z * z).sqrt();
-        let angle = z.atan2(x);
+        let angle = x.atan2(z);
         let radius_at_point = self.radius_at_angle(angle);
         distance <= radius_at_point - margin
     }
@@ -146,7 +146,7 @@ impl ArenaShape {
     /// Used for edge falloff calculations.
     pub fn edge_proximity(&self, x: f32, z: f32) -> f32 {
         let distance = (x * x + z * z).sqrt();
-        let angle = z.atan2(x);
+        let angle = x.atan2(z);
         let radius_at_point = self.radius_at_angle(angle);
         (distance / radius_at_point).min(1.0)
     }

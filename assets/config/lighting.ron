@@ -1,0 +1,72 @@
+// Lighting Configuration for Effects
+// Controls explosion lights, projectile lights, and emissive multipliers
+(
+    // Explosion lights - temporary lights spawned on impact
+    // color: RGB (0.0-1.0), intensity: lumens, range: meters, duration: seconds
+    explosion_lights: {
+        "fireball": (
+            color: (1.0, 0.5, 0.1),
+            intensity: 400000.0,
+            range: 240.0,
+            duration: 0.2,
+        ),
+        "frost": (
+            color: (0.6, 0.9, 1.0),
+            intensity: 300000.0,
+            range: 240.0,
+            duration: 0.2,
+        ),
+        "enemy_spawn": (
+            color: (0.9, 0.5, 1.0),
+            intensity: 350000.0,
+            range: 160.0,
+            duration: 0.25,
+        ),
+    },
+
+    // Projectile lights - point lights attached to projectiles in flight
+    // color: RGB (0.0-1.0), intensity: lumens, range: meters
+    projectile_lights: {
+        "Fireball": (
+            color: (1.0, 0.6, 0.0),
+            intensity: 100000.0,
+            range: 120.0,
+        ),
+        "Frostbolt": (
+            color: (0.6, 0.9, 1.0),
+            intensity: 100000.0,
+            range: 120.0,
+        ),
+        "MagicMissile": (
+            color: (0.9, 0.4, 1.0),
+            intensity: 100000.0,
+            range: 45,
+        ),
+        "EnemyFireball": (
+            color: (1.0, 0.6, 0.2),
+            intensity: 100000.0,
+            range: 45,
+        ),
+        "EnemyFrostbolt": (
+            color: (0.5, 0.8, 1.0),
+            intensity: 100000.0,
+            range: 45,
+        ),
+        "EnemyBolt": (
+            color: (1.0, 1.0, 0.4),
+            intensity: 100000.0,
+            range: 45,
+        ),
+    },
+
+    // Emissive multipliers for projectile materials
+    // Higher values = brighter glow on the projectile mesh itself
+    emissive_multipliers: {
+        "Fireball": 2.0,
+        "Frostbolt": 2.0,
+        "MagicMissile": 3.0,
+        "EnemyFireball": 2.0,
+        "EnemyFrostbolt": 2.0,
+        "EnemyBolt": 2.0,
+    },
+)

@@ -1,0 +1,69 @@
+// Particle Trail Effects Configuration
+// Controls continuous particle streams attached to projectiles
+//
+// Gradient format: list of (time, value) where time is 0.0-1.0 (particle lifetime fraction)
+// color_gradient: (time, (R, G, B, A)) where RGBA are 0.0-1.0
+// size_gradient: (time, size) where size is in world units
+(
+    trails: {
+        // Fire trail - warm orange-red particles rising from projectile
+        "fire_trail": (
+            color_gradient: [
+                (0.0, (1.0, 0.8, 0.3, 0.8)),   // Bright yellow-orange
+                (0.3, (1.0, 0.5, 0.1, 0.6)),   // Orange
+                (0.7, (0.8, 0.2, 0.0, 0.3)),   // Red-orange
+                (1.0, (0.3, 0.1, 0.0, 0.0)),   // Dark, fade out
+            ],
+            size_gradient: [
+                (0.0, 0.04),
+                (0.3, 0.06),
+                (1.0, 0.0),
+            ],
+            spawn_rate: 80.0,      // Particles per second
+            speed: 0.5,            // Initial particle velocity
+            lifetime: 0.25,        // How long each particle lives
+            spawn_radius: 0.02,    // Random offset from spawn point
+            gravity: (0.0, 1.0, 0.0),  // Slight upward drift
+        ),
+
+        // Frost trail - cool blue-white particles drifting downward
+        "frost_trail": (
+            color_gradient: [
+                (0.0, (0.9, 0.95, 1.0, 0.8)),  // Near-white
+                (0.3, (0.6, 0.8, 1.0, 0.6)),   // Light cyan
+                (0.7, (0.3, 0.5, 0.9, 0.3)),   // Medium blue
+                (1.0, (0.1, 0.3, 0.6, 0.0)),   // Dark blue, fade out
+            ],
+            size_gradient: [
+                (0.0, 0.03),
+                (0.3, 0.05),
+                (1.0, 0.0),
+            ],
+            spawn_rate: 100.0,
+            speed: 0.3,
+            lifetime: 0.2,
+            spawn_radius: 0.02,
+            gravity: (0.0, -0.5, 0.0),  // Slight downward drift (cold sinks)
+        ),
+
+        // Magic trail - purple arcane particles with no gravity
+        "magic_trail": (
+            color_gradient: [
+                (0.0, (1.0, 0.7, 1.0, 0.9)),   // Pink-white
+                (0.3, (0.9, 0.4, 1.0, 0.7)),   // Bright purple
+                (0.7, (0.6, 0.2, 0.9, 0.4)),   // Medium purple
+                (1.0, (0.3, 0.1, 0.5, 0.0)),   // Dark purple, fade out
+            ],
+            size_gradient: [
+                (0.0, 0.025),
+                (0.2, 0.04),
+                (1.0, 0.0),
+            ],
+            spawn_rate: 60.0,
+            speed: 0.4,
+            lifetime: 0.18,
+            spawn_radius: 0.015,
+            gravity: (0.0, 0.0, 0.0),  // No gravity (magical)
+        ),
+    },
+)

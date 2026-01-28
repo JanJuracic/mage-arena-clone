@@ -9,7 +9,7 @@ use crate::arena::ArenaConfig;
 use crate::particles::{SpawnParticleEvent, ParticleSet, TrailConfig};
 use bevy_hanabi::{EffectAsset, ParticleEffect};
 use crate::camera::ScreenShakeEvent;
-use crate::effects::{spawn_fireball_explosion_light, spawn_frost_explosion_light};
+use crate::effects::{spawn_fireball_explosion_light, spawn_frost_explosion_light, LightingConfig};
 
 pub struct SpellPlugin;
 
@@ -307,6 +307,7 @@ fn handle_spell_cast(
     mut transform_query: Query<&mut Transform>,
     spell_defs: Res<SpellDefinitions>,
     arena_config: Res<ArenaConfig>,
+    lighting_config: Res<LightingConfig>,
     mut particle_events: EventWriter<SpawnParticleEvent>,
 ) {
     for event in spell_events.read() {
@@ -349,8 +350,9 @@ fn handle_spell_cast(
                     &mut effects,
                     event,
                     stats,
+                    &lighting_config,
+                    "Fireball",
                     Color::srgb(1.0, 0.4, 0.0),
-                    Color::srgb(1.0, 0.6, 0.0),
                     TrailConfig::fire(),
                 );
             }
@@ -362,8 +364,9 @@ fn handle_spell_cast(
                     &mut effects,
                     event,
                     stats,
+                    &lighting_config,
+                    "Frostbolt",
                     Color::srgb(0.4, 0.7, 1.0),
-                    Color::srgb(0.6, 0.9, 1.0),
                     TrailConfig::frost(),
                 );
             }
@@ -400,8 +403,9 @@ fn handle_spell_cast(
                     &mut effects,
                     event,
                     stats,
-                    Color::srgb(1.0, 0.9, 0.2),   // Yellow
-                    Color::srgb(1.0, 1.0, 0.4),   // Bright yellow emissive
+                    &lighting_config,
+                    "EnemyBolt",
+                    Color::srgb(1.0, 0.9, 0.2),   // Yellow base
                     TrailConfig::fire(), // Use fire trail for yellow glow
                 );
             }
@@ -414,8 +418,9 @@ fn handle_spell_cast(
                     &mut effects,
                     event,
                     stats,
-                    Color::srgb(1.0, 0.5, 0.1),   // Deep orange
-                    Color::srgb(1.0, 0.6, 0.2),   // Orange emissive
+                    &lighting_config,
+                    "EnemyFireball",
+                    Color::srgb(1.0, 0.5, 0.1),   // Deep orange base
                     TrailConfig::fire(),
                 );
             }
@@ -428,8 +433,9 @@ fn handle_spell_cast(
                     &mut effects,
                     event,
                     stats,
-                    Color::srgb(0.3, 0.6, 1.0),   // Blue
-                    Color::srgb(0.5, 0.8, 1.0),   // Light blue emissive
+                    &lighting_config,
+                    "EnemyFrostbolt",
+                    Color::srgb(0.3, 0.6, 1.0),   // Blue base
                     TrailConfig::frost(),
                 );
             }
@@ -444,11 +450,17 @@ fn spawn_projectile(
     effects: &mut Assets<EffectAsset>,
     event: &SpellCastEvent,
     stats: &SpellStats,
+    lighting_config: &LightingConfig,
+    projectile_key: &str,
     base_color: Color,
-    emissive_color: Color,
     trail_config: TrailConfig,
 ) {
     use crate::particles::create_trail;
+
+    // Get light and emissive settings from config
+    let light_data = lighting_config.projectile_light_or_default(projectile_key);
+    let emissive_mult = lighting_config.get_emissive_multiplier(projectile_key);
+    let light_color = Color::srgb(light_data.color.0, light_data.color.1, light_data.color.2);
 
     // All projectiles spawn from the same point (slightly in front of player at eye level)
     let spawn_pos = event.position + Vec3::Y * 0.2;
@@ -460,7 +472,7 @@ fn spawn_projectile(
         Mesh3d(meshes.add(Sphere::new(projectile_radius))),
         MeshMaterial3d(materials.add(StandardMaterial {
             base_color,
-            emissive: LinearRgba::from(emissive_color) * 2.0,
+            emissive: LinearRgba::from(light_color) * emissive_mult,
             ..default()
         })),
         Transform::from_translation(spawn_pos).looking_to(event.direction, Vec3::Y),
@@ -481,12 +493,12 @@ fn spawn_projectile(
             ParticleEffect::new(trail_effect),
             Transform::default(),
         ));
-        // Subtle point light for illumination
+        // Point light for illumination (values from config)
         parent.spawn((
             PointLight {
-                color: emissive_color,
-                intensity: 1200.0,
-                range: 4.0,
+                color: light_color,
+                intensity: light_data.intensity,
+                range: light_data.range,
                 shadows_enabled: false,
                 ..default()
             },
@@ -500,6 +512,7 @@ fn spawn_magic_missile(
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<StandardMaterial>,
     effects: &mut Assets<EffectAsset>,
+    lighting_config: &LightingConfig,
     position: Vec3,
     direction: Vec3,
     owner: Entity,
@@ -508,6 +521,11 @@ fn spawn_magic_missile(
     speed: f32,
 ) {
     use crate::particles::create_trail;
+
+    // Get light and emissive settings from config
+    let light_data = lighting_config.projectile_light_or_default("MagicMissile");
+    let emissive_mult = lighting_config.get_emissive_multiplier("MagicMissile");
+    let light_color = Color::srgb(light_data.color.0, light_data.color.1, light_data.color.2);
 
     // All projectiles spawn from the same point (no directional offset)
     let spawn_pos = position + Vec3::Y * 0.2;
@@ -519,7 +537,7 @@ fn spawn_magic_missile(
         Mesh3d(meshes.add(Sphere::new(projectile_radius))),
         MeshMaterial3d(materials.add(StandardMaterial {
             base_color: Color::srgb(0.8, 0.3, 1.0),  // Purple
-            emissive: LinearRgba::new(0.9, 0.4, 1.0, 1.0) * 3.0,
+            emissive: LinearRgba::from(light_color) * emissive_mult,
             ..default()
         })),
         Transform::from_translation(spawn_pos).looking_to(direction, Vec3::Y),
@@ -543,12 +561,12 @@ fn spawn_magic_missile(
             ParticleEffect::new(trail_effect),
             Transform::default(),
         ));
-        // Subtle point light for illumination
+        // Point light for illumination (values from config)
         parent.spawn((
             PointLight {
-                color: Color::srgb(0.9, 0.4, 1.0), // Purple
-                intensity: 900.0,
-                range: 3.5,
+                color: light_color,
+                intensity: light_data.intensity,
+                range: light_data.range,
                 shadows_enabled: false,
                 ..default()
             },
@@ -563,6 +581,7 @@ fn update_missile_launchers(
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut effects: ResMut<Assets<EffectAsset>>,
     time: Res<Time>,
+    lighting_config: Res<LightingConfig>,
     mut launchers: Query<(Entity, &mut MissileLauncher)>,
 ) {
     for (entity, mut launcher) in launchers.iter_mut() {
@@ -574,6 +593,7 @@ fn update_missile_launchers(
                 &mut meshes,
                 &mut materials,
                 &mut effects,
+                &lighting_config,
                 launcher.position,
                 launcher.direction,
                 launcher.owner,
@@ -660,6 +680,7 @@ fn projectile_collision(
     mut damage_events: EventWriter<DamageEvent>,
     mut particle_events: EventWriter<SpawnParticleEvent>,
     mut shake_events: EventWriter<ScreenShakeEvent>,
+    lighting_config: Res<LightingConfig>,
     projectiles: Query<(Entity, &Transform, &Projectile, &ProjectileRadius)>,
     mut hittables: Query<(Entity, &Transform, &Team, Option<&mut Health>), With<Hittable>>,
     player_query: Query<&Transform, With<Player>>,
@@ -715,6 +736,7 @@ fn projectile_collision(
                             &mut commands,
                             &mut meshes,
                             &mut materials,
+                            &lighting_config,
                             hit_pos,
                             FIREBALL_EXPLOSION_RADIUS,
                             projectile.damage,
@@ -728,6 +750,7 @@ fn projectile_collision(
                             &mut commands,
                             &mut meshes,
                             &mut materials,
+                            &lighting_config,
                             hit_pos,
                             ENEMY_FIREBALL_RADIUS,
                             projectile.damage,
@@ -742,7 +765,7 @@ fn projectile_collision(
                             source: projectile.owner,
                         });
                         commands.entity(target_entity).insert(SlowEffect::new(0.5, 2.0));
-                        spawn_frost_explosion_light(&mut commands, hit_pos);
+                        spawn_frost_explosion_light(&mut commands, hit_pos, &lighting_config);
                     }
                     SpellType::EnemyFrostbolt => {
                         // Direct damage + slow (same as player frostbolt)
@@ -752,7 +775,7 @@ fn projectile_collision(
                             source: projectile.owner,
                         });
                         commands.entity(target_entity).insert(SlowEffect::new(0.5, 2.0));
-                        spawn_frost_explosion_light(&mut commands, hit_pos);
+                        spawn_frost_explosion_light(&mut commands, hit_pos, &lighting_config);
                     }
                     _ => {
                         // Direct damage for other spells
@@ -778,6 +801,7 @@ fn projectile_terrain_collision(
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut particle_events: EventWriter<SpawnParticleEvent>,
     mut shake_events: EventWriter<ScreenShakeEvent>,
+    lighting_config: Res<LightingConfig>,
     spatial_query: SpatialQuery,
     projectiles: Query<(Entity, &Transform, &Projectile, &ProjectileSpeed, &ProjectileRadius)>,
     hittables: Query<Entity, With<Hittable>>,
@@ -849,6 +873,7 @@ fn projectile_terrain_collision(
                         &mut commands,
                         &mut meshes,
                         &mut materials,
+                        &lighting_config,
                         hit_position,
                         FIREBALL_EXPLOSION_RADIUS,
                         projectile.damage,
@@ -861,6 +886,7 @@ fn projectile_terrain_collision(
                         &mut commands,
                         &mut meshes,
                         &mut materials,
+                        &lighting_config,
                         hit_position,
                         ENEMY_FIREBALL_RADIUS,
                         projectile.damage,
@@ -868,7 +894,7 @@ fn projectile_terrain_collision(
                     );
                 }
                 SpellType::Frostbolt | SpellType::EnemyFrostbolt => {
-                    spawn_frost_explosion_light(&mut commands, hit_position);
+                    spawn_frost_explosion_light(&mut commands, hit_position, &lighting_config);
                 }
                 _ => {}
             }
@@ -904,13 +930,14 @@ fn spawn_fireball_explosion(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<StandardMaterial>,
+    lighting_config: &LightingConfig,
     position: Vec3,
     radius: f32,
     damage: f32,
     owner_team: Team,
 ) {
     // Spawn temporary light for the explosion
-    spawn_fireball_explosion_light(commands, position);
+    spawn_fireball_explosion_light(commands, position, lighting_config);
 
     commands.spawn((
         Mesh3d(meshes.add(Sphere::new(1.0))), // Unit sphere, scaled by transform

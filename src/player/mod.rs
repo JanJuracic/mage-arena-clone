@@ -5,7 +5,8 @@ use crate::states::GameState;
 use crate::combat::{Health, Mana, Team, Hittable, SlowEffect};
 use crate::spells::SpellCooldowns;
 use crate::camera::{GameCamera, CameraYaw};
-use crate::physics::{GroundSensorBundle, GroundState};
+use crate::physics::{GroundSensorBundle, GroundState, TerrainSampler};
+use crate::arena::FallDeath;
 
 pub struct PlayerPlugin;
 
@@ -44,7 +45,12 @@ fn spawn_player(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    terrain_sampler: Res<TerrainSampler>,
 ) {
+    // Get terrain height at center and add offset for player height
+    let terrain_height = terrain_sampler.sample_height(0.0, 0.0);
+    let spawn_y = terrain_height + 1.5; // Offset above terrain
+
     // Player body - invisible in first person
     // We still need the collider for physics
     commands.spawn((
@@ -56,8 +62,7 @@ fn spawn_player(
                 alpha_mode: AlphaMode::Blend,
                 ..default()
             })),
-            // Spawn above terrain - higher to account for elevation
-            Transform::from_xyz(0.0, 3.0, 0.0),
+            Transform::from_xyz(0.0, spawn_y, 0.0),
         ),
         // Physics components
         (
@@ -88,6 +93,7 @@ fn spawn_player(
         (
             Team::PLAYER,
             Hittable,
+            FallDeath,
             StateScoped(GameState::Playing),
             Name::new("Player"),
         ),

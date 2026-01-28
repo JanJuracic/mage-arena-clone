@@ -34,6 +34,7 @@ pub fn calculate_boundary_boulder_count(shape: &ArenaShape, spacing: f32, inward
 }
 
 /// Spawn a dense boulder boundary wall following the arena's irregular contour
+/// Boulders are placed above water level along the shore line
 pub fn spawn_boulder_boundary(
     commands: &mut Commands,
     shape: &ArenaShape,
@@ -53,12 +54,8 @@ pub fn spawn_boulder_boundary(
         boundary_config.inward_offset,
     );
 
-    info!(
-        "Spawning {} boundary boulders following irregular contour",
-        boulder_count
-    );
-
     let angle_step = TAU / boulder_count as f32;
+    let mut spawned_count = 0;
 
     for i in 0..boulder_count {
         // Base angle for this boulder
@@ -69,8 +66,9 @@ pub fn spawn_boulder_boundary(
         let angle = base_angle + angle_jitter;
 
         // Get radius at this angle from the irregular shape
+        // Place boulders further inward to be above water
         let base_radius = shape.radius_at_angle(angle);
-        let effective_radius = base_radius - boundary_config.inward_offset;
+        let effective_radius = base_radius - boundary_config.inward_offset - 3.0;
 
         // Slight radial jitter for natural look
         let radial_jitter = rng.gen_range(-0.3..0.3);
@@ -79,7 +77,15 @@ pub fn spawn_boulder_boundary(
         // Calculate position
         let x = angle.cos() * radius;
         let z = angle.sin() * radius;
-        let pos = terrain_sampler.get_spawn_position(x, z, 0.0);
+
+        // Check if position is above water
+        let height = terrain_sampler.sample_height(x, z);
+        if height < terrain_sampler.water_level() {
+            // Skip boulders that would be in water
+            continue;
+        }
+
+        let pos = Vec3::new(x, height, z);
 
         // Random rotation (full rotation variation)
         let rotation = Quat::from_rotation_y(rng.gen_range(0.0..TAU));
@@ -108,34 +114,47 @@ pub fn spawn_boulder_boundary(
             StateScoped(GameState::Playing),
             Name::new("Boundary Boulder"),
         ));
+        spawned_count += 1;
     }
 
-    // Add invisible backup collider ring just outside boulders to prevent escape
-    // Use the max radius to ensure it covers the irregular shape
-    spawn_backup_collider_ring(commands, shape);
+    info!(
+        "Spawned {} boundary boulders around island shore",
+        spawned_count
+    );
+
+    // Add invisible backup collider ring around the island
+    spawn_backup_collider_ring(commands, shape, terrain_sampler);
 }
 
-/// Spawn a thin invisible collider ring as backup to absolutely prevent escape
+/// Spawn a thin invisible collider ring as backup to prevent escape
 /// Follows the irregular shape contour
-fn spawn_backup_collider_ring(commands: &mut Commands, shape: &ArenaShape) {
+fn spawn_backup_collider_ring(commands: &mut Commands, shape: &ArenaShape, terrain_sampler: &TerrainSampler) {
     let wall_height = 8.0;
     let wall_thickness = 0.5;
     let num_segments = 64;
-    let outward_offset = 1.0; // Place slightly outside the boundary
+    let inward_offset = 5.0; // Place inside the shore to be above water
 
     for i in 0..num_segments {
         let angle = (i as f32 / num_segments as f32) * TAU;
 
-        // Get radius at this angle and add offset
-        let radius = shape.radius_at_angle(angle) + outward_offset;
+        // Get radius at this angle with inward offset
+        let radius = shape.radius_at_angle(angle) - inward_offset;
 
         let x = angle.cos() * radius;
         let z = angle.sin() * radius;
 
+        // Get terrain height at this position
+        let height = terrain_sampler.sample_height(x, z);
+
+        // Only place collider if above water
+        if height < terrain_sampler.water_level() {
+            continue;
+        }
+
         // Calculate segment width based on arc length
         // For irregular shapes, calculate the actual distance to the next point
         let next_angle = ((i + 1) as f32 / num_segments as f32) * TAU;
-        let next_radius = shape.radius_at_angle(next_angle) + outward_offset;
+        let next_radius = shape.radius_at_angle(next_angle) - inward_offset;
         let next_x = next_angle.cos() * next_radius;
         let next_z = next_angle.sin() * next_radius;
 
@@ -144,7 +163,7 @@ fn spawn_backup_collider_ring(commands: &mut Commands, shape: &ArenaShape) {
         let segment_width = (dx * dx + dz * dz).sqrt();
 
         commands.spawn((
-            Transform::from_xyz(x, wall_height / 2.0, z).with_rotation(Quat::from_rotation_y(-angle)),
+            Transform::from_xyz(x, height + wall_height / 2.0, z).with_rotation(Quat::from_rotation_y(-angle)),
             RigidBody::Static,
             Collider::cuboid(segment_width, wall_height, wall_thickness),
             StateScoped(GameState::Playing),
